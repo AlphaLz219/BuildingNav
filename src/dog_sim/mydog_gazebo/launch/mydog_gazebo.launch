@@ -1,0 +1,37 @@
+<?xml version="1.0" ?>
+<launch>
+
+  <!-- Start paused -->
+  <arg name="paused"                                default="true"/>
+  <!-- Set the initial pose of the robot's main body -->
+  <arg name="x"                                     default="0.0"/>
+  <arg name="y"                                     default="0.0"/>
+  <arg name="z"                                     default="0.7"/>
+  <arg name="roll"                                  default="0"/>
+  <arg name="pitch"                                 default="0.0"/>
+  <arg name="yaw"                                   default="0.0"/>
+  <!-- Name of the world -->
+  <arg name="world"                                 default="empty"/>
+  <!-- Path to the world file -->
+  <arg name="world_file"                            default="$(find mydog_gazebo)/worlds/$(arg world).world"/>
+  <!-- Model path -->
+  <arg name="model_path"                            default="$(find mydog_gazebo)/.."/>
+  <!-- GUI ARGUMENTS -->
+  <!-- Enable/disable Gazebo GUI -->
+  <arg name="gui"                               default="false"/>
+  <arg name="fixedBase"                               default="false"/>
+
+  <!-- Load Gazebo world -->
+  <include file="$(find gazebo_ros)/launch/empty_world.launch">
+    <env name="GAZEBO_MODEL_PATH" value="$(arg model_path)"/>
+    <arg name="paused"            value="$(arg paused)"/>
+    <arg name="world_name"        value="$(arg world_file)"/>
+    <arg name="gui"               value="$(arg gui)"/>
+  </include>
+  
+  <param if="$(arg fixedBase)" name="robot_description" command="$(find xacro)/xacro '$(find mydog_description)/urdf/mydog_fixedBase.urdf.xacro' " />
+  <param unless="$(arg fixedBase)" name="robot_description" command="$(find xacro)/xacro '$(find mydog_description)/urdf/mydog.urdf.xacro' " />
+      
+  <node name="urdf_spawner" pkg="gazebo_ros" type="spawn_model" respawn="false" output="screen" args="-J RF_KFE 0.0 -J LF_KFE 0.0 -J RH_KFE 0.0 -J LH_KFE 0.0 -urdf -model mydog -param robot_description -x $(arg x) -y $(arg y) -z $(arg z) -R $(arg roll) -P $(arg pitch) -Y $(arg yaw)"/>
+
+</launch>

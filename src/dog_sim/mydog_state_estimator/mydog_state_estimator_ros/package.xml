@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+
+<package format="2">
+
+  <name>mydog_state_estimator_ros</name>
+  <version>0.1.0</version>
+  <description>State estimator.</description>
+
+  <license>Proprietary</license>
+  <author email="guiyangxin15@gmail.com">Guiyang Xin</author>
+  <maintainer email="guiyangxin@moying.ai">Guiyang Xin</maintainer>
+
+  <buildtool_depend>catkin</buildtool_depend>
+  <depend>roscpp</depend>
+  <depend>tf</depend>
+  <depend>nav_msgs</depend>
+
+</package>

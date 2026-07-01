@@ -1,0 +1,14 @@
+<?xml version="1.0" ?>
+<launch>
+
+  
+  <!-- GUI node -->
+  <node name="rqt_gui_dog_node" pkg="rqt_gui" type="rqt_gui" respawn="false" output="screen"
+   args = "--standalone rqt_dog_gui" >
+
+
+    
+  </node >
+
+
+</launch>

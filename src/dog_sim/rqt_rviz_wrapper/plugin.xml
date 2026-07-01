@@ -1,0 +1,17 @@
+<library path="lib/librqt_rviz_wrapper">
+  <class name="rqt_rviz_wrapper/RvizWrapper" type="rqt_rviz_wrapper::RvizWrapper" base_class_type="rqt_gui_cpp::Plugin">
+    <description>
+      A GUI that can embed a RViz window
+    </description>
+    <qtgui>
+      <group>
+        <label>Visualization</label>
+        <icon type="theme">folder</icon>
+        <statustip></statustip>
+      </group>
+      <label>RQT RViz Wrapper</label>
+      <icon type="theme">image-x-generic</icon>
+      <statustip>RQT RViz Wrapper GUI</statustip>
+    </qtgui>
+  </class>
+</library>

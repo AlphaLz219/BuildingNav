@@ -1,0 +1,85 @@
+<?xml version="1.0"?>
+<sdf version="1.4">
+
+<material name="blue">
+    <color rgba="0.0 0.0 0.8 1.0"/>
+  </material>
+
+  <model name="slope">
+    <static>true</static>
+    <pose>0.5 0 0 0 0 0</pose>
+
+    <link name="slope_up">
+    <pose>1.95533648913 0 0.5 0 -0.52 0</pose>
+      <collision name="collision">
+        <geometry>
+          <box>
+            <size>2.0 2 0.01</size>
+          </box>
+        </geometry>
+      </collision>
+      <visual name="visual">
+        <geometry>
+          <box>
+            <size>2.0 2 0.01</size>
+          </box>
+        </geometry>
+        <material>
+            <ambient>0 0 0.8 1</ambient>
+            <diffuse>0.7 0.9 0 1</diffuse>
+            <specular>0.2 0.2 0.2 64</specular>
+            <emissive>0.1 0 0.1 1</emissive>
+          </material>
+      </visual>
+    </link>
+
+    <link name='slope_zero'>
+      <pose>3.41067297825 0 1 0 0 0</pose>
+      <collision name="collision">
+        <geometry>
+          <box>
+            <size>1.1786 2 0.01</size>
+          </box>
+        </geometry>
+      </collision>
+      <visual name="visual">
+        <geometry>
+          <box>
+            <size>1.1786 2 0.01</size>
+          </box>
+        </geometry>
+        <material>
+            <ambient>0 0 0.8 1</ambient>
+            <diffuse>0.7 0.9 0 1</diffuse>
+            <specular>0.2 0.2 0.2 64</specular>
+            <emissive>0.1 0 0.1 1</emissive>
+          </material>
+      </visual>
+    </link>
+
+    <link name="slope_down">
+    <pose>4.86600946738 0 0.5 0 0.52 0</pose>
+      <collision name="collision">
+        <geometry>
+          <box>
+            <size>2.0 2 0.01</size>
+          </box>
+        </geometry>
+      </collision>
+      <visual name="visual">
+        <geometry>
+          <box>
+            <size>2.0 2 0.01</size>
+          </box>
+        </geometry>
+        <material>
+            <ambient>0 0 0.8 1</ambient>
+            <diffuse>0.7 0.9 0 1</diffuse>
+            <specular>0.2 0.2 0.2 64</specular>
+            <emissive>0.1 0 0.1 1</emissive>
+          </material>
+      </visual>
+    </link>
+
+  </model>
+</sdf>

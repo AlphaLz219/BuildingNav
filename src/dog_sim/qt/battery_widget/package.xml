@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>battery_widget</name>
+  <version>0.5.0</version>
+  <description>The battery_widget package</description>
+
+  <maintainer email="msuetterlin@anybotics.com">Marco Sütterlin</maintainer>
+  <maintainer email="sbachmann@anybotics.com">Samuel Bachmann</maintainer>
+
+  <license>Proprietary</license>
+
+  <author email="sbachmann@anybotics.com">Samuel Bachmann</author>
+
+  <buildtool_depend>catkin</buildtool_depend>
+  <depend>roscpp</depend>
+  <depend>std_msgs</depend>
+  <depend>qtbase5-dev</depend>
+  <depend>rqt_gui_cpp</depend>
+  <depend>sensor_msgs</depend>
+
+  <test_depend>gtest</test_depend>
+  <test_depend>cmake_code_coverage</test_depend>
+
+</package>
