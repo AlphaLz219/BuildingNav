@@ -1,0 +1,96 @@
+<?xml version="1.0"?>
+<launch>
+  <!--
+    Stage 1: Bring up Gazebo with the indoor world (re-used from
+    py_hybrid_planner) and spawn the ASK-3 quadruped + its controllers
+    + state estimator.
+
+    Note on model name: mydog_state_estimator hardcodes the lookup name
+    "mydog" when reading /gazebo/model_states. We therefore spawn the
+    URDF in Gazebo as `mydog` even though the URDF/xacro/controllers all
+    refer to the rname=ask_3 namespace.
+  -->
+
+  <arg name="world"          default="indoor"/>
+  <arg name="world_file"     default="$(find dog_hybrid_planner)/worlds/$(arg world).world"/>
+  <arg name="rname"          default="ask_3"/>
+  <arg name="robot_path"     value="(find $(arg rname)_description)"/>
+  <arg name="dollar"         value="$"/>
+
+  <arg name="x_pos"          default="0.8"/>
+  <arg name="y_pos"          default="0.8"/>
+  <arg name="z_pos"          default="0.42"/>
+  <arg name="yaw"            default="0.7854"/>
+  <arg name="paused"         default="true"/>
+  <arg name="gazebo_gui"     default="false"/>
+  <arg name="time_step"      default="0.02"/>
+  <arg name="publish_rate"   default="50"/>
+  <arg name="stepHeight"     default="0.06"/>
+  <arg name="stepLength"     default="0.0"/>
+  <arg name="swingPeriod"    default="0.2"/>
+  <arg name="model_path"     default="$(find mydog_gazebo)/models/.."/>
+  <arg name="output"         default="screen"/>
+
+  <include file="$(find gazebo_ros)/launch/empty_world.launch">
+    <env name="GAZEBO_MODEL_PATH" value="$(arg model_path)"/>
+    <arg name="world_name"   value="$(arg world_file)"/>
+    <arg name="paused"       value="$(arg paused)"/>
+    <arg name="use_sim_time" value="true"/>
+    <arg name="gui"          value="$(arg gazebo_gui)"/>
+    <arg name="headless"     value="false"/>
+    <arg name="debug"        value="false"/>
+  </include>
+
+  <param name="robot_description"
+         command="$(find xacro)/xacro '$(arg dollar)$(arg robot_path)/urdf/$(arg rname).urdf.xacro'"/>
+
+  <!-- spawn as `mydog` so the bundled state estimator picks the right model -->
+  <node name="urdf_spawner" pkg="gazebo_ros" type="spawn_model"
+        respawn="false" output="$(arg output)"
+        args="-J RF_KFE 0.0 -J LF_KFE 0.0 -J RH_KFE 0.0 -J LH_KFE 0.0
+              -urdf -model mydog -param robot_description
+              -x $(arg x_pos) -y $(arg y_pos) -z $(arg z_pos)
+              -R 0 -P 0 -Y $(arg yaw)"/>
+
+  <rosparam file="$(find mydog_control_sim_ros)/config/$(arg rname)_control.yaml"
+            command="load"/>
+  <node name="controller_spawner" pkg="controller_manager" type="spawner"
+        respawn="false" output="$(arg output)" ns="/$(arg rname)"
+        args="joint_state_controller
+              joint1_position_controller
+              joint2_position_controller
+              joint3_position_controller
+              joint4_position_controller
+              joint5_position_controller
+              joint6_position_controller
+              joint7_position_controller
+              joint8_position_controller
+              joint9_position_controller
+              joint10_position_controller
+              joint11_position_controller
+              joint12_position_controller"/>
+
+  <node name="robot_state_publisher" pkg="robot_state_publisher"
+        type="robot_state_publisher" respawn="false" output="$(arg output)">
+    <remap from="/joint_states" to="/$(arg rname)/joint_states"/>
+    <param name="publish_frequency" type="double" value="$(arg publish_rate)"/>
+  </node>
+
+  <node name="mydog_control_sim_ros" pkg="mydog_control_sim_ros"
+        type="mydog_control_sim_ros_node" output="$(arg output)">
+    <param name="time_step"   type="double" value="$(arg time_step)"/>
+    <param name="isRealRobot" type="bool"   value="false"/>
+    <param name="fixedBase"   type="bool"   value="false"/>
+    <param name="stepHeight"  type="double" value="$(arg stepHeight)"/>
+    <param name="stepLength"  type="double" value="$(arg stepLength)"/>
+    <param name="swingPeriod" type="double" value="$(arg swingPeriod)"/>
+    <param name="useKF"       type="bool"   value="false"/>
+    <param name="rname"       type="string" value="$(arg rname)"/>
+  </node>
+
+  <node name="mydog_state_estimator_ros_node"
+        pkg="mydog_state_estimator_ros"
+        type="mydog_state_estimator_ros_node"
+        required="true" output="screen"/>
+
+</launch>

@@ -1,0 +1,9 @@
+{
+  "paper_markdown": "/home/cjx/catkin_ws/src/dog_hybrid_planner/reports/四足机器人导航路径规划方法研究_论文.md",
+  "paper_docx": "/home/cjx/catkin_ws/src/dog_hybrid_planner/reports/四足机器人导航路径规划方法研究_论文.docx",
+  "asset_dir": "/home/cjx/catkin_ws/src/dog_hybrid_planner/experiments/paper_assets",
+  "ablation_csv": "/home/cjx/catkin_ws/src/dog_hybrid_planner/experiments/paper_assets/algorithm_improvement_ablation.csv",
+  "ablation_figure": "/home/cjx/catkin_ws/src/dog_hybrid_planner/experiments/paper_assets/figure_5_1_algorithm_ablation_metrics.png",
+  "characters": 37798,
+  "note": "数据为离线规划/轨迹仿真实验数据，非Gazebo物理实测数据。"
+}

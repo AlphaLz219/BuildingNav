@@ -1,0 +1,42 @@
+<?xml version="1.0"?>
+<launch>
+  <!-- ASK-3 friendly wide-corridor lab: Gazebo world + matching map_server map. -->
+  <arg name="rname"  default="ask_3"/>
+  <arg name="gazebo_model" default="mydog"/>
+  <arg name="x_pos"  default="1.2"/>
+  <arg name="y_pos"  default="1.2"/>
+  <arg name="z_pos"  default="0.40"/>
+  <arg name="yaw"    default="0.0"/>
+  <arg name="paused" default="true"/>
+  <arg name="gazebo_gui" default="true"/>
+  <arg name="open_rviz"  default="true"/>
+  <arg name="use_kinematic_driver" default="false"/>
+  <arg name="enable_low_level_gait" default="true"/>
+  <arg name="kinematic_fixed_z" default="0.38"/>
+  <arg name="use_amcl" default="true"/>
+  <arg name="use_fake_scan" default="false"/>
+
+  <include file="$(find dog_hybrid_planner)/launch/dog_all.launch">
+    <arg name="rname"      value="$(arg rname)"/>
+    <arg name="gazebo_model" value="$(arg gazebo_model)"/>
+    <arg name="world"      value="ask3_lab"/>
+    <arg name="world_file" value="$(find dog_hybrid_planner)/worlds/ask3_lab.world"/>
+    <arg name="map_file"   value="$(find dog_hybrid_planner)/maps/ask3_lab.yaml"/>
+    <arg name="x_pos"      value="$(arg x_pos)"/>
+    <arg name="y_pos"      value="$(arg y_pos)"/>
+    <arg name="z_pos"      value="$(arg z_pos)"/>
+    <arg name="yaw"        value="$(arg yaw)"/>
+    <arg name="paused"     value="$(arg paused)"/>
+    <arg name="gazebo_gui" value="$(arg gazebo_gui)"/>
+    <arg name="open_rviz"  value="$(arg open_rviz)"/>
+    <arg name="inflate_radius" value="0.26"/>
+    <arg name="robot_radius"   value="0.24"/>
+    <arg name="hard_radius"    value="0.13"/>
+    <arg name="auto_enable_idle" value="false"/>
+    <arg name="enable_low_level_gait" value="$(arg enable_low_level_gait)"/>
+    <arg name="use_kinematic_driver" value="$(arg use_kinematic_driver)"/>
+    <arg name="kinematic_fixed_z" value="$(arg kinematic_fixed_z)"/>
+    <arg name="use_amcl" value="$(arg use_amcl)"/>
+    <arg name="use_fake_scan" value="$(arg use_fake_scan)"/>
+  </include>
+</launch>
