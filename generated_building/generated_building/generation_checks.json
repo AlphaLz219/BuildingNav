@@ -1,0 +1,24 @@
+{
+  "checks": [
+    {
+      "actual": true,
+      "expected": true,
+      "name": "vertical_connector_available",
+      "status": "pass"
+    },
+    {
+      "actual": true,
+      "expected": true,
+      "name": "door_control_config_written",
+      "status": "pass"
+    },
+    {
+      "actual": true,
+      "expected": true,
+      "name": "elevator_config_matches_option",
+      "status": "pass"
+    }
+  ],
+  "schema": "lightweight_generation_checks_v1",
+  "status": "pass"
+}

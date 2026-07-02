@@ -1,0 +1,103 @@
+{
+  "schema": "competition_danger_truth_v1",
+  "seed": 347837297,
+  "building": {
+    "model_name": "generated_lightweight_building",
+    "floor_count": 2,
+    "floor_heights": [
+      0.0,
+      2.6
+    ],
+    "footprint": {
+      "width": 10.0,
+      "length": 10.0
+    }
+  },
+  "source_rules": {
+    "danger": "red sphere",
+    "distractors": [
+      "red box",
+      "green sphere"
+    ],
+    "placement": "room interior only; avoids walls, furniture, source overlap, and room door keep-out areas"
+  },
+  "danger_sources": [
+    {
+      "id": 0,
+      "model_name": "danger_red_sphere_00",
+      "position": [
+        -2.935,
+        6.101,
+        0.15
+      ],
+      "floor_index": 0,
+      "room_id": "light_floor_0_room_0",
+      "color": "red",
+      "shape": "sphere",
+      "is_danger": true,
+      "radius": 0.15
+    },
+    {
+      "id": 1,
+      "model_name": "danger_red_sphere_01",
+      "position": [
+        -3.534,
+        8.436,
+        0.15
+      ],
+      "floor_index": 0,
+      "room_id": "light_floor_0_room_2",
+      "color": "red",
+      "shape": "sphere",
+      "is_danger": true,
+      "radius": 0.15
+    },
+    {
+      "id": 2,
+      "model_name": "danger_red_sphere_02",
+      "position": [
+        -2.963,
+        8.952,
+        0.15
+      ],
+      "floor_index": 0,
+      "room_id": "light_floor_0_room_2",
+      "color": "red",
+      "shape": "sphere",
+      "is_danger": true,
+      "radius": 0.15
+    }
+  ],
+  "distraction_sources": [
+    {
+      "id": 3,
+      "model_name": "distractor_green_sphere_00",
+      "position": [
+        -2.654,
+        8.198,
+        2.75
+      ],
+      "floor_index": 1,
+      "room_id": "light_floor_1_room_2",
+      "color": "green",
+      "shape": "sphere",
+      "is_danger": false,
+      "radius": 0.15
+    },
+    {
+      "id": 4,
+      "model_name": "distractor_green_sphere_01",
+      "position": [
+        2.584,
+        5.834,
+        0.15
+      ],
+      "floor_index": 0,
+      "room_id": "light_floor_0_room_1",
+      "color": "green",
+      "shape": "sphere",
+      "is_danger": false,
+      "radius": 0.15
+    }
+  ]
+}

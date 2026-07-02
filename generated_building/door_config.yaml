@@ -1,0 +1,53 @@
+doors:
+- id: main_entrance
+  floor_index: 0
+  kind: main_entrance
+  pose:
+  - 0.0
+  - 0.0
+  - 1.1
+  - 0.0
+  - 0.0
+  - 1.5707963267948966
+  width: 1.6
+  height: 2.2
+  initial_open: true
+  dynamic: true
+  model_name: dynamic_main_entrance
+  panel_poses:
+    left_closed:
+    - 0.0
+    - -0.4
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    right_closed:
+    - 0.0
+    - 0.4
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    left_open:
+    - 0.0
+    - -0.8600000000000001
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    right_open:
+    - 0.0
+    - 0.8600000000000001
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+  closed_pose:
+  - 0.0
+  - 0.0
+  - 1.1
+  - 0.0
+  - 0.0
+  - 1.5707963267948966
+signature: 15222c77aea74fd9
