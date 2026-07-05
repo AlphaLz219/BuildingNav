@@ -1,0 +1,50 @@
+<?xml version="1.0"?>
+<launch>
+  <!-- Arguments -->
+  <arg name="world_name" default="$(find generated_building)/competition_scene.world"/>
+  <arg name="robot_x" default="0.0"/>
+  <arg name="robot_y" default="0.0"/>
+  <arg name="robot_z" default="0.5"/>
+  <arg name="robot_yaw" default="0.0"/>
+  <arg name="use_sim_time" default="true"/>
+  <arg name="gui" default="true"/>
+  <arg name="headless" default="false"/>
+
+  <!-- Use simulation time -->
+  <param name="/use_sim_time" value="$(arg use_sim_time)"/>
+
+  <!-- Start Gazebo with the competition scene world -->
+  <include file="$(find gazebo_ros)/launch/empty_world.launch">
+    <arg name="world_name" value="$(arg world_name)"/>
+    <arg name="debug" value="false"/>
+    <arg name="gui" value="$(arg gui)"/>
+    <arg name="paused" value="false"/>
+    <arg name="use_sim_time" value="$(arg use_sim_time)"/>
+    <arg name="headless" value="$(arg headless)"/>
+  </include>
+
+  <!-- Load robot URDF -->
+  <param name="robot_description" command="$(find xacro)/xacro $(find autonomous_navigation)/urdf/wheeled_robot.xacro"/>
+
+  <!-- Robot state publisher -->
+  <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher" respawn="false" output="screen">
+    <param name="publish_frequency" type="double" value="50.0"/>
+    <param name="use_tf_static" value="true"/>
+  </node>
+
+  <!-- Joint state publisher -->
+  <node name="joint_state_publisher" pkg="joint_state_publisher" type="joint_state_publisher">
+    <param name="use_gui" value="false"/>
+    <param name="rate" value="50"/>
+  </node>
+
+  <!-- Spawn robot in Gazebo -->
+  <node name="spawn_urdf" pkg="gazebo_ros" type="spawn_model" args="-param robot_description -urdf -x $(arg robot_x) -y $(arg robot_y) -z $(arg robot_z) -Y $(arg robot_yaw) -model wheeled_robot" respawn="false" output="screen"/>
+
+  <!-- Teleop keyboard node (WSAD control) -->
+  <node name="keyboard_teleop" pkg="autonomous_navigation" type="keyboard_teleop.py" output="screen">
+  </node>
+
+  <!-- RViz for visualization -->
+  <node name="rviz" pkg="rviz" type="rviz" args="-d $(find autonomous_navigation)/rviz/navigation.rviz" output="screen"/>
+</launch>

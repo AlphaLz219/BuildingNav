@@ -1,4 +1,81 @@
-devel/
+```
+# Compiled and build artifacts
+*.pyc
+__pycache__/
+*.o
+*.obj
+*.so
+*.dll
+*.exe
+*.class
+*.a
+*.lib
+*.out
+*.dylib
+*.jar
+
+# Dependencies
+node_modules/
+venv/
+.venv/
+.env
+.env.local
+.env.*
+
+# Build directories
 build/
-results/
-logs/
+dist/
+target/
+.deps/
+bin/
+obj/
+
+# Logs and temp files
+*.log
+*.tmp
+*.swp
+*.swo
+*.bak
+*.~
+*~
+
+# Editors
+.vscode/
+.idea/
+*.iml
+*.ipr
+*.iws
+.settings/
+.project
+.classpath
+
+# OS
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Icon?
+.directory
+*.nib
+
+# Testing and coverage
+.coverage
+htmlcov/
+coverage/
+.pytest_cache/
+.mypy_cache/
+.hypothesis/
+
+# ROS specific
+*.dae
+*.stl
+*.dae.meta
+*.stl.meta
+*.manifest
+*.manifest.meta
+*.msg
+*.srv
+*.action
+*.msg.meta
+*.srv.meta
+*.action.meta
+```
