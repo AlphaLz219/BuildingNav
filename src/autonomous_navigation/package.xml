@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>autonomous_navigation</name>
+  <version>0.0.0</version>
+  <description>Autonomous exploration and navigation in unknown buildings</description>
+  <maintainer email="user@todo.todo">user</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <exec_depend>gazebo_ros</exec_depend>
+  <exec_depend>robot_state_publisher</exec_depend>
+  <exec_depend>turtlebot3_description</exec_depend>
+  <exec_depend>turtlebot3_gazebo</exec_depend>
+  <exec_depend>turtlebot3_teleop</exec_depend>
+  <exec_depend>xacro</exec_depend>
+  <exec_depend>livox_laser_simulation</exec_depend>
+  <exec_depend>building_generator_classic</exec_depend>
+
+  <export>
+  </export>
+</package>

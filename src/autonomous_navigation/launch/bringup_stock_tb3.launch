@@ -1,0 +1,47 @@
+<?xml version="1.0" ?>
+<launch>
+  <!-- ======================== 参数 ======================== -->
+  <arg name="model"        default="burger"  doc="TB3 型号 [burger, waffle, waffle_pi]"/>
+  <arg name="world_file"   default="$(find autonomous_navigation)/../../generated_building/competition_scene.world"
+                           doc="比赛场景世界文件"/>
+  <arg name="robot_x"      default="0.0"    doc="机器人出生点 X (m)"/>
+  <arg name="robot_y"      default="-1.0"   doc="机器人出生点 Y (m)"/>
+  <arg name="robot_z"      default="0.0"    doc="机器人出生点 Z (m)"/>
+  <arg name="robot_yaw"    default="1.5708" doc="机器人朝向 yaw (rad)，默认 π/2=90°CCW 面朝建筑入口"/>
+  <arg name="gui"          default="true"/>
+  <arg name="paused"       default="false"/>
+  <arg name="use_sim_time" default="true"/>
+
+  <!-- ============= 设置模型路径（generated_building/models） ============= -->
+  <env name="GAZEBO_MODEL_PATH"
+       value="$(find autonomous_navigation)/../../generated_building:$(optenv GAZEBO_MODEL_PATH)"/>
+
+  <!-- ============= 1. 启动 Gazebo + 比赛世界 ============= -->
+  <include file="$(find gazebo_ros)/launch/empty_world.launch">
+    <arg name="world_name"   value="$(arg world_file)"/>
+    <arg name="paused"       value="$(arg paused)"/>
+    <arg name="use_sim_time" value="$(arg use_sim_time)"/>
+    <arg name="gui"          value="$(arg gui)"/>
+    <arg name="headless"     value="false"/>
+    <arg name="debug"        value="false"/>
+  </include>
+
+  <!-- ============= 2. 加载 TB3 模型描述 ============= -->
+  <param name="robot_description"
+         command="$(find xacro)/xacro --inorder
+                  $(find turtlebot3_description)/urdf/turtlebot3_$(arg model).urdf.xacro" />
+
+  <!-- ============= 3. Spawn 机器人 ============= -->
+  <node pkg="gazebo_ros" type="spawn_model" name="spawn_tb3"
+        args="-urdf -model turtlebot3_burger
+              -x $(arg robot_x) -y $(arg robot_y) -z $(arg robot_z)
+              -Y $(arg robot_yaw)
+              -param robot_description" />
+
+  <!-- ============= 4. 发布 TF ============= -->
+  <node pkg="robot_state_publisher" type="robot_state_publisher"
+        name="robot_state_publisher">
+    <param name="publish_frequency" value="30.0"/>
+  </node>
+
+</launch>
