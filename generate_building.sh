@@ -65,7 +65,7 @@ cd "$WORKSPACE_DIR"
 
 # ---- 2. 可配置参数（均支持通过环境变量覆盖）-------------------------------
 SEED="${SEED:-}"                              # 随机种子，空=随机
-FLOOR_COUNT="${FLOOR_COUNT:-2}"               # 楼层数
+FLOOR_COUNT="${FLOOR_COUNT:-1}"               # 楼层数
 ROOMS_PER_FLOOR="${ROOMS_PER_FLOOR:-2}"       # 每层房间数
 BUILDING_WIDTH="${BUILDING_WIDTH:-20.0}"      # 建筑宽度
 BUILDING_LENGTH="${BUILDING_LENGTH:-36.0}"    # 建筑长度

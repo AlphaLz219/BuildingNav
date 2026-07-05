@@ -1,7 +1,0 @@
-<!--xml-->
-<launch>
-  <node name="rqt_gui_node" pkg="rqt_gui" type="rqt_gui">
-  </node>
-  
-
-</launch>

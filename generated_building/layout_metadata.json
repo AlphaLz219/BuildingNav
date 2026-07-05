@@ -124,102 +124,6 @@
         "y_max": 3.0999999999999996,
         "y_min": 0.7
       }
-    },
-    {
-      "corridor_bounds": {
-        "x_max": 0.8,
-        "x_min": -0.8,
-        "y_max": 35.8,
-        "y_min": 4.2
-      },
-      "elevation": 2.6,
-      "elevator_bounds": {
-        "x_max": 2.95,
-        "x_min": 1.15,
-        "y_max": 3.0999999999999996,
-        "y_min": 0.7
-      },
-      "floor_index": 1,
-      "lobby_bounds": {
-        "x_max": 10.0,
-        "x_min": -10.0,
-        "y_max": 4.2,
-        "y_min": 0.0
-      },
-      "reachability": {
-        "elevator": false,
-        "rooms": {
-          "light_floor_1_room_0": true,
-          "light_floor_1_room_1": true
-        },
-        "stair": true
-      },
-      "rooms": [
-        {
-          "bounds": {
-            "x_max": -0.8,
-            "x_min": -9.65,
-            "y_max": 35.8,
-            "y_min": 4.2
-          },
-          "door_pose": [
-            -0.8,
-            20.0,
-            3.7,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "floor_index": 1,
-          "furniture": [],
-          "goal_pose": [
-            -4.875000000000001,
-            20.0,
-            2.6,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "id": "light_floor_1_room_0",
-          "room_type": "lightweight_room",
-          "side": "left"
-        },
-        {
-          "bounds": {
-            "x_max": 9.65,
-            "x_min": 0.8,
-            "y_max": 35.8,
-            "y_min": 4.2
-          },
-          "door_pose": [
-            0.8,
-            20.0,
-            3.7,
-            0.0,
-            0.0,
-            3.141592653589793
-          ],
-          "floor_index": 1,
-          "furniture": [],
-          "goal_pose": [
-            4.875000000000001,
-            20.0,
-            2.6,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "id": "light_floor_1_room_1",
-          "room_type": "lightweight_room",
-          "side": "right"
-        }
-      ],
-      "stair_bounds": {
-        "x_max": -1.15,
-        "x_min": -2.95,
-        "y_max": 3.0999999999999996,
-        "y_min": 0.7
-      }
     }
   ],
   "footprint": {
@@ -240,13 +144,12 @@
     "include_roof": false,
     "include_stairs": true,
     "room_counts": [
-      2,
       2
     ],
-    "seed": 1011833852
+    "seed": 196014536
   },
   "model_name": "generated_lightweight_building",
-  "signature": "15222c77aea74fd9",
+  "signature": "a866b89a2a3c210d",
   "target": "gazebo_classic_lightweight",
   "target_points": {
     "elevators": {},
@@ -274,22 +177,6 @@
         0.0,
         0.0,
         0.0
-      ],
-      "light_floor_1_room_0": [
-        -4.875000000000001,
-        20.0,
-        2.6,
-        0.0,
-        0.0,
-        0.0
-      ],
-      "light_floor_1_room_1": [
-        4.875000000000001,
-        20.0,
-        2.6,
-        0.0,
-        0.0,
-        0.0
       ]
     },
     "stairs": {
@@ -297,14 +184,6 @@
         -1.5999999999999999,
         1.9,
         0.0,
-        0.0,
-        0.0,
-        0.0
-      ],
-      "1": [
-        -1.5999999999999999,
-        1.9,
-        2.6,
         0.0,
         0.0,
         0.0
