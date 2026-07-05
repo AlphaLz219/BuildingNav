@@ -1,0 +1,61 @@
+# GMapping SLAM Parameters
+# Optimized for Mid360 LiDAR and TurtleBot3 platform
+
+slam_gmapping:
+  # Map settings
+  map_update_interval: 5.0        # seconds between map updates
+  maxUrange: 10.0                 # maximum usable range (m)
+  maxRange: 40.0                  # maximum sensor range (m)
+  
+  # Grid resolution
+  xmin: -50.0                     # initial map bounds (m)
+  ymin: -50.0
+  xmax: 50.0
+  ymax: 50.0
+  delta: 0.05                     # map resolution (m/cell)
+  
+  # Particle filter settings
+  particles: 30                   # number of particles
+  iterations: 5                   # scan matching iterations
+  
+  # Motion model parameters
+  sigma: 0.05                     # standard deviation of particle distribution
+  kernelSize: 1                   # kernel size for smoothing
+  lstep: 0.05                     # linear step size
+  astep: 0.05                     # angular step size
+  lsigma: 0.075                   # linear sigma
+  ogain: 3.0                      # gain for likelihood calculation
+  lskip: 0                        # laser skip
+  
+  # Likelihood parameters
+  minimumScore: 0.0               # minimum score for accepting scans
+  
+  # Update thresholds
+  srr: 0.1                        # linear motion noise (rot-rot)
+  srt: 0.2                        # linear motion noise (rot-trans)
+  str: 0.1                        # linear motion noise (trans-rot)
+  stt: 0.2                        # linear motion noise (trans-trans)
+  
+  # Resampling
+  resampleThreshold: 0.5          # resample threshold
+  useScanMatching: true           # enable scan matching
+  useSimTime: false               # use simulation time
+  
+  # TF settings
+  base_frame: "base_footprint"    # robot base frame
+  odom_frame: "odom"              # odometry frame
+  map_frame: "map"                # map frame
+  transform_publish_period: 0.05  # TF publish period (s)
+  
+  # Laser processing
+  laser_min_range: 0.1            # minimum laser range (m)
+  laser_max_range: 30.0           # maximum laser range (m)
+  laser_step: 1                   # laser beam skip factor
+  
+  # Initial pose
+  initial_pose_x: 0.0
+  initial_pose_y: 0.0
+  initial_pose_a: 0.0
+  initial_cov_xx: 0.5
+  initial_cov_yy: 0.5
+  initial_cov_aa: 0.1

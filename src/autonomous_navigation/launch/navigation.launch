@@ -1,0 +1,40 @@
+<?xml version="1.0"?>
+<!-- Launch file for Navigation with move_base -->
+<launch>
+  <!-- Arguments -->
+  <arg name="no_static_map" default="false"/>
+  
+  <!-- Load navigation parameters -->
+  <rosparam command="load" file="$(find autonomous_navigation)/config/nav_params.yaml"/>
+
+  <!-- Move Base Node -->
+  <node pkg="move_base" type="move_base" respawn="false" name="move_base" output="screen">
+    <param name="base_global_planner" value="navfn/NavfnROS"/>
+    <param name="base_local_planner" value="dwa_local_planner/DWAPlannerROS"/>
+    <param name="recovery_behavior_enabled" value="true"/>
+    <param name="clearing_rotation_allowed" value="true"/>
+    
+    <!-- Global costmap -->
+    <remap from="global_costmap/map" to="/map"/>
+    <remap from="global_costmap/obstacle_layer/scan" to="/scan_filtered"/>
+    
+    <!-- Local costmap -->
+    <remap from="local_costmap/obstacle_layer/scan" to="/scan_filtered"/>
+    
+    <!-- Odometry -->
+    <remap from="odom" to="/odom"/>
+    <remap from="cmd_vel" to="/cmd_vel"/>
+    
+    <!-- Parameters -->
+    <param name="controller_frequency" value="10.0"/>
+    <param name="planner_frequency" value="5.0"/>
+    <param name="planner_patience" value="5.0"/>
+    <param name="controller_patience" value="15.0"/>
+    <param name="conservative_reset_dist" value="3.0"/>
+    
+    <!-- Costmap configurations -->
+    <rosparam file="$(find autonomous_navigation)/config/nav_params.yaml" command="load" ns="global_costmap"/>
+    <rosparam file="$(find autonomous_navigation)/config/nav_params.yaml" command="load" ns="local_costmap"/>
+    <rosparam file="$(find autonomous_navigation)/config/nav_params.yaml" command="load" ns="DWAPlannerROS"/>
+  </node>
+</launch>

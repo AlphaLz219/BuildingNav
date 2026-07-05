@@ -1,0 +1,57 @@
+<?xml version="1.0"?>
+<!-- Launch file for Autonomous Exploration -->
+<launch>
+  <!-- Arguments -->
+  <arg name="robot_model" default="turtlebot3_waffle_pi"/>
+  <arg name="world_name" default="$(find autonomous_navigation)/worlds/turtlebot3_exploration.world"/>
+  
+  <!-- Stage 1: Spawn Robot in Gazebo -->
+  <include file="$(find autonomous_navigation)/launch/spawn_turtlebot3.launch">
+    <arg name="model" value="$(arg robot_model)"/>
+    <arg name="world_name" value="$(arg world_name)"/>
+  </include>
+
+  <!-- Wait for Gazebo to start -->
+  <node pkg="rostopic" type="rostopic" name="wait_for_scan" 
+        args="echo /scan -n 1" output="screen"/>
+
+  <!-- Stage 2: Start SLAM with GMapping -->
+  <include file="$(find autonomous_navigation)/launch/slam.launch"/>
+
+  <!-- Stage 3: Start Navigation Stack -->
+  <include file="$(find autonomous_navigation)/launch/navigation.launch"/>
+
+  <!-- Stage 4: Start Frontier Exploration (explore_lite) -->
+  <node pkg="explore_lite" type="explore" name="explore" output="screen">
+    <remap from="move_base" to="/move_base"/>
+    <remap from="map" to="/map"/>
+    <param name="base_frame" value="base_footprint"/>
+    <param name="global_frame" value="map"/>
+    <param name="robot_base_frame" value="base_footprint"/>
+    <param name="costmap_topic" value="/move_base/global_costmap/costmap"/>
+    <param name="condition_topic" value=""/>
+    <param name="frontier_viz_topic" value="/explore/frontiers"/>
+    <param name="potential_viz_topic" value="/explore/potential"/>
+    
+    <!-- Exploration parameters -->
+    <param name="gain_scale" value="1.0"/>
+    <param name="transform_tolerance" value="0.5"/>
+    <param name="min_frontier_size" value="0.5"/>
+    <param name="max_frontier_size" value="2.0"/>
+    
+    <!-- Safety parameters -->
+    <param name="progress_timeout" value="30.0"/>
+    <param name="wait_after_goal" value="5.0"/>
+  </node>
+
+  <!-- Stage 5: Start Exploration Manager -->
+  <node pkg="autonomous_navigation" type="exploration_manager.py" name="exploration_manager" output="screen">
+    <param name="world_frame" value="map"/>
+    <param name="robot_base_frame" value="base_footprint"/>
+  </node>
+
+  <!-- RViz for visualization -->
+  <node pkg="rviz" type="rviz" name="rviz" 
+        args="-d $(find autonomous_navigation)/rviz/exploration.rviz"
+        output="screen"/>
+</launch>
