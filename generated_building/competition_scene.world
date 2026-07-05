@@ -1441,7 +1441,7 @@
   
     <model name="distractor_red_box_00">
       <static>true</static>
-      <pose>-4.209583 10.672844 0.150000 0.000000 0.000000 0.000000</pose>
+      <pose>-2.807920 20.066583 0.150000 0.000000 0.000000 0.000000</pose>
       <link name="link">
         <collision name="collision">
           <geometry>
@@ -1459,37 +1459,13 @@
           <material>
             <ambient>1.0 0.0 0.0 1.0</ambient>
             <diffuse>1.0 0.0 0.0 1.0</diffuse>
-          </material>
-        </visual>
-      </link>
-    </model>
-    <model name="distractor_green_sphere_01">
-      <static>true</static>
-      <pose>8.354058 25.114553 0.150000 0.000000 0.000000 0.000000</pose>
-      <link name="link">
-        <collision name="collision">
-          <geometry>
-            <sphere>
-              <radius>0.150</radius>
-            </sphere>
-          </geometry>
-        </collision>
-        <visual name="visual">
-          <geometry>
-            <sphere>
-              <radius>0.150</radius>
-            </sphere>
-          </geometry>
-          <material>
-            <ambient>0.0 1.0 0.0 1.0</ambient>
-            <diffuse>0.0 1.0 0.0 1.0</diffuse>
           </material>
         </visual>
       </link>
     </model>
     <model name="danger_red_sphere_00">
       <static>true</static>
-      <pose>-6.272178 20.888079 0.150000 0.000000 0.000000 0.000000</pose>
+      <pose>7.962082 22.315943 0.150000 0.000000 0.000000 0.000000</pose>
       <link name="link">
         <collision name="collision">
           <geometry>
@@ -1503,78 +1479,6 @@
             <sphere>
               <radius>0.150</radius>
             </sphere>
-          </geometry>
-          <material>
-            <ambient>1.0 0.0 0.0 1.0</ambient>
-            <diffuse>1.0 0.0 0.0 1.0</diffuse>
-          </material>
-        </visual>
-      </link>
-    </model>
-    <model name="distractor_green_sphere_02">
-      <static>true</static>
-      <pose>-8.247415 13.637185 0.150000 0.000000 0.000000 0.000000</pose>
-      <link name="link">
-        <collision name="collision">
-          <geometry>
-            <sphere>
-              <radius>0.150</radius>
-            </sphere>
-          </geometry>
-        </collision>
-        <visual name="visual">
-          <geometry>
-            <sphere>
-              <radius>0.150</radius>
-            </sphere>
-          </geometry>
-          <material>
-            <ambient>0.0 1.0 0.0 1.0</ambient>
-            <diffuse>0.0 1.0 0.0 1.0</diffuse>
-          </material>
-        </visual>
-      </link>
-    </model>
-    <model name="distractor_green_sphere_03">
-      <static>true</static>
-      <pose>7.795490 16.866373 0.150000 0.000000 0.000000 0.000000</pose>
-      <link name="link">
-        <collision name="collision">
-          <geometry>
-            <sphere>
-              <radius>0.150</radius>
-            </sphere>
-          </geometry>
-        </collision>
-        <visual name="visual">
-          <geometry>
-            <sphere>
-              <radius>0.150</radius>
-            </sphere>
-          </geometry>
-          <material>
-            <ambient>0.0 1.0 0.0 1.0</ambient>
-            <diffuse>0.0 1.0 0.0 1.0</diffuse>
-          </material>
-        </visual>
-      </link>
-    </model>
-    <model name="distractor_red_box_04">
-      <static>true</static>
-      <pose>-8.023714 29.120928 0.150000 0.000000 0.000000 0.000000</pose>
-      <link name="link">
-        <collision name="collision">
-          <geometry>
-            <box>
-              <size>0.300000 0.300000 0.300000</size>
-            </box>
-          </geometry>
-        </collision>
-        <visual name="visual">
-          <geometry>
-            <box>
-              <size>0.300000 0.300000 0.300000</size>
-            </box>
           </geometry>
           <material>
             <ambient>1.0 0.0 0.0 1.0</ambient>
@@ -1585,7 +1489,7 @@
     </model>
     <model name="danger_red_sphere_01">
       <static>true</static>
-      <pose>5.407024 12.551258 0.150000 0.000000 0.000000 0.000000</pose>
+      <pose>5.872110 28.859481 0.150000 0.000000 0.000000 0.000000</pose>
       <link name="link">
         <collision name="collision">
           <geometry>
@@ -1607,9 +1511,129 @@
         </visual>
       </link>
     </model>
+    <model name="distractor_red_box_01">
+      <static>true</static>
+      <pose>-8.677342 34.498832 0.150000 0.000000 0.000000 0.000000</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.300000 0.300000 0.300000</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.300000 0.300000 0.300000</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>1.0 0.0 0.0 1.0</ambient>
+            <diffuse>1.0 0.0 0.0 1.0</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="distractor_green_sphere_02">
+      <static>true</static>
+      <pose>5.720138 26.750840 0.150000 0.000000 0.000000 0.000000</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <sphere>
+              <radius>0.150</radius>
+            </sphere>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <sphere>
+              <radius>0.150</radius>
+            </sphere>
+          </geometry>
+          <material>
+            <ambient>0.0 1.0 0.0 1.0</ambient>
+            <diffuse>0.0 1.0 0.0 1.0</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="distractor_red_box_03">
+      <static>true</static>
+      <pose>4.516782 8.821003 0.150000 0.000000 0.000000 0.000000</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.300000 0.300000 0.300000</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.300000 0.300000 0.300000</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>1.0 0.0 0.0 1.0</ambient>
+            <diffuse>1.0 0.0 0.0 1.0</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="distractor_red_box_04">
+      <static>true</static>
+      <pose>-1.986281 23.884048 0.150000 0.000000 0.000000 0.000000</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.300000 0.300000 0.300000</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.300000 0.300000 0.300000</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>1.0 0.0 0.0 1.0</ambient>
+            <diffuse>1.0 0.0 0.0 1.0</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
     <model name="danger_red_sphere_02">
       <static>true</static>
-      <pose>-6.368276 9.199158 0.150000 0.000000 0.000000 0.000000</pose>
+      <pose>4.437272 28.438152 0.150000 0.000000 0.000000 0.000000</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <sphere>
+              <radius>0.150</radius>
+            </sphere>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <sphere>
+              <radius>0.150</radius>
+            </sphere>
+          </geometry>
+          <material>
+            <ambient>1.0 0.0 0.0 1.0</ambient>
+            <diffuse>1.0 0.0 0.0 1.0</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="danger_red_sphere_03">
+      <static>true</static>
+      <pose>-4.287690 11.742772 0.150000 0.000000 0.000000 0.000000</pose>
       <link name="link">
         <collision name="collision">
           <geometry>
@@ -1633,7 +1657,7 @@
     </model>
     <model name="distractor_red_box_05">
       <static>true</static>
-      <pose>-8.127580 27.888208 0.150000 0.000000 0.000000 0.000000</pose>
+      <pose>-5.732176 13.943208 0.150000 0.000000 0.000000 0.000000</pose>
       <link name="link">
         <collision name="collision">
           <geometry>
@@ -1647,126 +1671,6 @@
             <box>
               <size>0.300000 0.300000 0.300000</size>
             </box>
-          </geometry>
-          <material>
-            <ambient>1.0 0.0 0.0 1.0</ambient>
-            <diffuse>1.0 0.0 0.0 1.0</diffuse>
-          </material>
-        </visual>
-      </link>
-    </model>
-    <model name="distractor_green_sphere_06">
-      <static>true</static>
-      <pose>6.905494 32.326507 0.150000 0.000000 0.000000 0.000000</pose>
-      <link name="link">
-        <collision name="collision">
-          <geometry>
-            <sphere>
-              <radius>0.150</radius>
-            </sphere>
-          </geometry>
-        </collision>
-        <visual name="visual">
-          <geometry>
-            <sphere>
-              <radius>0.150</radius>
-            </sphere>
-          </geometry>
-          <material>
-            <ambient>0.0 1.0 0.0 1.0</ambient>
-            <diffuse>0.0 1.0 0.0 1.0</diffuse>
-          </material>
-        </visual>
-      </link>
-    </model>
-    <model name="danger_red_sphere_03">
-      <static>true</static>
-      <pose>-2.720561 7.833610 0.150000 0.000000 0.000000 0.000000</pose>
-      <link name="link">
-        <collision name="collision">
-          <geometry>
-            <sphere>
-              <radius>0.150</radius>
-            </sphere>
-          </geometry>
-        </collision>
-        <visual name="visual">
-          <geometry>
-            <sphere>
-              <radius>0.150</radius>
-            </sphere>
-          </geometry>
-          <material>
-            <ambient>1.0 0.0 0.0 1.0</ambient>
-            <diffuse>1.0 0.0 0.0 1.0</diffuse>
-          </material>
-        </visual>
-      </link>
-    </model>
-    <model name="distractor_red_box_07">
-      <static>true</static>
-      <pose>5.249586 27.219222 0.150000 0.000000 0.000000 0.000000</pose>
-      <link name="link">
-        <collision name="collision">
-          <geometry>
-            <box>
-              <size>0.300000 0.300000 0.300000</size>
-            </box>
-          </geometry>
-        </collision>
-        <visual name="visual">
-          <geometry>
-            <box>
-              <size>0.300000 0.300000 0.300000</size>
-            </box>
-          </geometry>
-          <material>
-            <ambient>1.0 0.0 0.0 1.0</ambient>
-            <diffuse>1.0 0.0 0.0 1.0</diffuse>
-          </material>
-        </visual>
-      </link>
-    </model>
-    <model name="danger_red_sphere_04">
-      <static>true</static>
-      <pose>4.716625 17.485662 0.150000 0.000000 0.000000 0.000000</pose>
-      <link name="link">
-        <collision name="collision">
-          <geometry>
-            <sphere>
-              <radius>0.150</radius>
-            </sphere>
-          </geometry>
-        </collision>
-        <visual name="visual">
-          <geometry>
-            <sphere>
-              <radius>0.150</radius>
-            </sphere>
-          </geometry>
-          <material>
-            <ambient>1.0 0.0 0.0 1.0</ambient>
-            <diffuse>1.0 0.0 0.0 1.0</diffuse>
-          </material>
-        </visual>
-      </link>
-    </model>
-    <model name="danger_red_sphere_05">
-      <static>true</static>
-      <pose>-8.769772 7.561571 0.150000 0.000000 0.000000 0.000000</pose>
-      <link name="link">
-        <collision name="collision">
-          <geometry>
-            <sphere>
-              <radius>0.150</radius>
-            </sphere>
-          </geometry>
-        </collision>
-        <visual name="visual">
-          <geometry>
-            <sphere>
-              <radius>0.150</radius>
-            </sphere>
           </geometry>
           <material>
             <ambient>1.0 0.0 0.0 1.0</ambient>

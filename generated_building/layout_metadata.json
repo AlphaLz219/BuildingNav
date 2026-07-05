@@ -146,10 +146,10 @@
     "room_counts": [
       2
     ],
-    "seed": 196014536
+    "seed": 1055506816
   },
   "model_name": "generated_lightweight_building",
-  "signature": "a866b89a2a3c210d",
+  "signature": "11d11eb1d9a4b39d",
   "target": "gazebo_classic_lightweight",
   "target_points": {
     "elevators": {},
