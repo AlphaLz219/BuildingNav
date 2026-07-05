@@ -1,18 +1,14 @@
-```
 # Compiled and build artifacts
 *.pyc
 __pycache__/
 *.o
 *.obj
-*.so
-*.dll
-*.exe
 *.class
+*.exe
+*.dll
+*.so
 *.a
-*.lib
 *.out
-*.dylib
-*.jar
 
 # Dependencies
 node_modules/
@@ -23,59 +19,49 @@ venv/
 .env.*
 
 # Build directories
-build/
 dist/
+build/
 target/
-.deps/
-bin/
-obj/
+.mypy_cache/
+.pytest_cache/
+.coverage
+coverage/
+htmlcov/
 
-# Logs and temp files
-*.log
-*.tmp
-*.swp
-*.swo
-*.bak
-*.~
-*~
-
-# Editors
+# Editor/IDE files
 .vscode/
 .idea/
-*.iml
-*.ipr
-*.iws
-.settings/
-.project
-.classpath
+*.swp
+*.swo
+*.tmp
 
-# OS
+# System files
 .DS_Store
 Thumbs.db
-ehthumbs.db
-Icon?
-.directory
-*.nib
 
-# Testing and coverage
-.coverage
-htmlcov/
-coverage/
-.pytest_cache/
-.mypy_cache/
-.hypothesis/
+# Logs
+*.log
 
-# ROS specific
-*.dae
-*.stl
-*.dae.meta
-*.stl.meta
-*.manifest
-*.manifest.meta
-*.msg
-*.srv
-*.action
-*.msg.meta
-*.srv.meta
-*.action.meta
-```
+# Compressed files
+*.zip
+*.gz
+*.tar
+*.tgz
+*.bz2
+*.xz
+*.7z
+*.rar
+*.zst
+*.lz4
+*.lzh
+*.cab
+*.arj
+*.rpm
+*.deb
+*.Z
+*.lz
+*.lzo
+*.tar.gz
+*.tar.bz2
+*.tar.xz
+*.tar.zst

@@ -2,7 +2,7 @@
 <robot xmlns:xacro="http://ros.org/wiki/xacro" name="wheeled_robot">
 
   <!-- Import Mid360 sensor macro -->
-  <xacro:include filename="$(find Mid360_imu_sim)/urdf/livox_mid360.xacro"/>
+  <xacro:include filename="$(find livox_laser_simulation)/urdf/livox_mid360.xacro"/>
 
   <!-- Robot Constants -->
   <xacro:property name="PI" value="3.1415926535897931"/>
