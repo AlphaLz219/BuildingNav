@@ -1,8 +1,8 @@
 {
   "building_depth": 36.0,
   "building_width": 20.0,
-  "danger_count": 4,
-  "distractor_count": 6,
+  "danger_count": 5,
+  "distractor_count": 5,
   "entrance_pose": [
     0.0,
     0.0,
@@ -24,7 +24,7 @@
   "num_floors": 1,
   "room_count": 2,
   "schema": "lightweight_competition_building_config_v1",
-  "seed": 1055506816,
+  "seed": 576729656,
   "target_points": {
     "elevators": {},
     "main_entrance": [
@@ -64,5 +64,5 @@
       ]
     }
   },
-  "world_file": "/home/liu/ros1_Project/BuildingNav_ws/generated_building/competition_scene.world"
+  "world_file": "/home/liu/Documents/rosProject/BuildingNav/generated_building/competition_scene.world"
 }

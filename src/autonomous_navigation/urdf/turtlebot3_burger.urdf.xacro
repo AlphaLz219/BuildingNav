@@ -150,8 +150,8 @@
   <joint name="laser_livox_joint" type="fixed">
     <parent link="base_link"/>
     <child link="laser_livox"/>
-    <!-- Position: front-upper of chassis, Pitch 45° downward same as A1 -->
-    <origin xyz="0.04 0 0.16" rpy="0 0.785 0"/>
+    <!-- Position: front-upper of chassis, Pitch ~5° 确保最低射线接近水平可打墙 -->
+    <origin xyz="0.04 0 0.16" rpy="0 0.087 0"/>
   </joint>
 
   <!-- LiDAR internal IMU link (mounted inside Mid360) -->
@@ -241,7 +241,7 @@
       <rightJoint>wheel_right_joint</rightJoint>
       <wheelSeparation>0.160</wheelSeparation>
       <wheelDiameter>0.066</wheelDiameter>
-      <wheelAcceleration>1</wheelAcceleration>
+      <wheelAcceleration>10</wheelAcceleration>
       <wheelTorque>20</wheelTorque>
       <rosDebugLevel>na</rosDebugLevel>
     </plugin>

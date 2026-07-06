@@ -31,14 +31,14 @@
       <collision name="lightweight_entrance_apron_collision">
         <geometry>
           <box>
-            <size>3.0000 1.6000 0.0600</size>
+            <size>3.0000 1.6000 0.0100</size>
           </box>
         </geometry>
       </collision>
       <visual name="lightweight_entrance_apron_visual">
         <geometry>
           <box>
-            <size>3.0000 1.6000 0.0600</size>
+            <size>3.0000 1.6000 0.0100</size>
           </box>
         </geometry>
         <material>

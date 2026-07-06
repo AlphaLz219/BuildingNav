@@ -48,15 +48,14 @@
   <node pkg="autonomous_navigation" type="pointcloud_converter.py"
         name="pointcloud_converter" output="screen"/>
 
-  <!-- ============= 5.5 水平激光坐标系（修复 pitch=45° 不平面问题） ========= -->
+  <!-- ============= 5.5 水平激光坐标系（确保投影面严格水平） ========= -->
   <!--     Mid360 安装有 45° 俯仰，pointcloud_to_laserscan 要求 target_frame Z 轴竖直 -->
   <!--     创建与 base_link 平行的虚拟坐标系，位于 laser_livox 相同位置        -->
   <node pkg="tf" type="static_transform_publisher"
         name="laser_livox_level_tf"
         args="0.04 0 0.16 0 0 0 base_link laser_livox_level 100"/>
 
-  <!-- ============= 6. 3D 点云 → 2D 激光扫描 ============= -->
-  <!--     从 Mid360 点云中提取地面附近一层，供 GMapping 建图使用       -->
+  <!-- ============= 6. 3D 点云 → 2D 激光扫描（供 SLAM 建图使用） ========= -->
   <node pkg="pointcloud_to_laserscan" type="pointcloud_to_laserscan_node"
         name="pointcloud_to_laserscan">
     <remap from="cloud_in"  to="/scan2"/>
@@ -69,39 +68,48 @@
     <param name="max_height"          value="0.05"/>
     <param name="angle_min"           value="-3.14159"/>
     <param name="angle_max"           value="3.14159"/>
-    <param name="angle_increment"     value="0.0058"/>
+    <param name="angle_increment"     value="0.005806"/>
     <param name="range_min"           value="0.1"/>
     <param name="range_max"           value="30.0"/>
     <param name="concurrency_level"   value="1"/>
   </node>
 
-  <!-- ============= 7. GMapping 建图（仿真模式：里程计定位 + 激光投影） ========= -->
-  <node pkg="gmapping" type="slam_gmapping" name="slam_gmapping" output="screen">
+  <!-- ============= 7. slam_toolbox 在线建图 ============= -->
+  <node pkg="slam_toolbox" type="async_slam_toolbox_node" name="slam_toolbox" output="screen">
     <remap from="scan" to="/scan_2d"/>
 
-    <param name="base_frame"           value="base_footprint"/>
-    <param name="odom_frame"           value="odom"/>
-    <param name="map_frame"            value="map"/>
+    <param name="odom_frame"  value="odom"/>
+    <param name="map_frame"   value="map"/>
+    <param name="base_frame"  value="base_footprint"/>
 
-    <param name="map_update_interval"  value="0.5"/>
-    <param name="maxUrange"            value="15.0"/>
-    <param name="maxRange"             value="30.0"/>
+    <param name="mode"              value="mapping"/>
+    <param name="map_start_pose"    value="[0.0, 2.0, 0.0]"/>
+    <param name="map_start_at_dock" value="false"/>
 
-    <!-- 仿真模式：里程计是绝对真值，极小噪声，极大信任 -->
-    <param name="particles"            value="5"/>         <!-- 5个粒子足够 -->
-    <param name="srr"  value="0.0001"/>  <param name="srt"  value="0.0001"/>
-    <param name="str"  value="0.0001"/>  <param name="stt"  value="0.0001"/>
+    <param name="map_update_interval"      value="0.5"/>
+    <param name="transform_publish_period" value="0.05"/>
 
-    <param name="lsigma"             value="0.025"/>       <!-- 不太信任扫描匹配 -->
-    <param name="minimumScore"        value="0"/>           <!-- 接受所有匹配 -->
-    <param name="linearUpdate"        value="0.2"/>
-    <param name="angularUpdate"       value="0.2"/>
-    <param name="temporalUpdate"      value="0.3"/>
-    <param name="resampleThreshold"   value="0.5"/>
-    <param name="iterations"          value="2"/>
+    <param name="minimum_travel_distance" value="0.1"/>
+    <param name="minimum_travel_heading"  value="0.05"/>
+    <param name="scan_buffer_size"        value="10"/>
+    <param name="minimum_time_interval"   value="0.3"/>
 
-    <param name="xmin" value="-25.0"/>  <param name="ymin" value="-40.0"/>
-    <param name="xmax" value="25.0"/>   <param name="ymax" value="40.0"/>
+    <param name="link_match_minimum_response_fine" value="0.1"/>
+    <param name="link_scan_max_distance"           value="1.5"/>
+
+    <param name="correlation_search_space_dimension"  value="0.5"/>
+    <param name="correlation_search_space_resolution" value="0.01"/>
+
+    <param name="do_loop_closing"                    value="true"/>
+    <param name="loop_match_minimum_chain_size"      value="10"/>
+    <param name="loop_search_max_distance"           value="3.0"/>
+    <param name="loop_match_minimum_response_coarse" value="0.35"/>
+    <param name="loop_match_minimum_response_fine"   value="0.45"/>
+
+    <param name="resolution"          value="0.05"/>
+    <param name="max_laser_range"     value="15.0"/>
+    <param name="transform_timeout"   value="0.2"/>
+    <param name="tf_buffer_duration"  value="30.0"/>
   </node>
 
   <!-- ============= 8. RViz 可视化 ============= -->

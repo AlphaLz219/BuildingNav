@@ -232,7 +232,7 @@ def _build_static_shell_model(
     _append_box(
         model,
         name="lightweight_entrance_apron",
-        size=(3.0, 1.6, 0.06),
+        size=(3.0, 1.6, 0.01),
         pose=(0.0, -0.8, 0.03, 0.0, 0.0, 0.0),
         color="0.62 0.63 0.65 1",
     )
