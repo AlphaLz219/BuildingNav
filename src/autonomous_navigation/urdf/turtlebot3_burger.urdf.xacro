@@ -241,7 +241,7 @@
       <rightJoint>wheel_right_joint</rightJoint>
       <wheelSeparation>0.160</wheelSeparation>
       <wheelDiameter>0.066</wheelDiameter>
-      <wheelAcceleration>10</wheelAcceleration>
+      <wheelAcceleration>100</wheelAcceleration>
       <wheelTorque>20</wheelTorque>
       <rosDebugLevel>na</rosDebugLevel>
     </plugin>

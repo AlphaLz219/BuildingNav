@@ -113,7 +113,7 @@
   </node>
 
   <!-- ============= 8. RViz 可视化 ============= -->
-  <arg name="rviz" default="false"/>
+  <arg name="rviz" default="true"/>
   <node pkg="rviz" type="rviz" name="rviz"
         args="-d $(find autonomous_navigation)/rviz/nav_mapping.rviz"
         if="$(arg rviz)"/>
