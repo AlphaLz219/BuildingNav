@@ -1,0 +1,36 @@
+<?xml version="1.0" ?>
+<!-- Fast-LIO2 3D 建图：TB3 + Mid360 -->
+<launch>
+  <arg name="rviz" default="true"/>
+
+  <!-- 加载 LiDAR/IMU 外参配置 -->
+  <rosparam command="load"
+            file="$(find autonomous_navigation)/config/tb3_mid360_fastlio.yaml"/>
+
+  <!-- Fast-LIO 参数 -->
+  <param name="feature_extract_enable" type="bool" value="0"/>
+  <param name="point_filter_num"       type="int"  value="2"/>
+  <param name="max_iteration"          type="int"  value="3"/>
+  <param name="filter_size_surf"       type="double" value="0.3"/>
+  <param name="filter_size_map"        type="double" value="0.3"/>
+  <param name="cube_side_length"       type="double" value="1000"/>
+  <param name="runtime_pos_log_enable" type="bool"   value="0"/>
+
+  <!-- Fast-LIO 核心节点 -->
+  <node pkg="fast_lio" type="fastlio_mapping"
+        name="laserMapping" output="screen"/>
+
+  <!-- TF 桥接：camera_init → odom（连接 Fast-LIO 和 Gazebo 两棵 TF 树） -->
+  <node pkg="autonomous_navigation" type="tf_bridge.py"
+        name="tf_bridge" output="screen"/>
+
+  <!-- 3D 点云 → 2D 占据栅格投影 -->
+  <node pkg="autonomous_navigation" type="pointcloud_to_2d_map.py"
+        name="pointcloud_to_2d_map" output="screen"/>
+
+  <!-- RViz -->
+  <group if="$(arg rviz)">
+    <node launch-prefix="nice" pkg="rviz" type="rviz" name="rviz"
+          args="-d $(find autonomous_navigation)/rviz/fastlio.rviz"/>
+  </group>
+</launch>

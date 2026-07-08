@@ -75,36 +75,7 @@
     <param name="concurrency_level"   value="1"/>
   </node>
 
-  <!-- ============= 7. GMapping 建图（仿真模式：里程计定位 + 激光投影） ========= -->
-  <node pkg="gmapping" type="slam_gmapping" name="slam_gmapping" output="screen">
-    <remap from="scan" to="/scan_2d"/>
-
-    <param name="base_frame"           value="base_footprint"/>
-    <param name="odom_frame"           value="odom"/>
-    <param name="map_frame"            value="map"/>
-
-    <param name="map_update_interval"  value="0.5"/>
-    <param name="maxUrange"            value="15.0"/>
-    <param name="maxRange"             value="30.0"/>
-
-    <!-- 仿真模式：里程计是绝对真值，极小噪声，极大信任 -->
-    <param name="particles"            value="5"/>         <!-- 5个粒子足够 -->
-    <param name="srr"  value="0.0001"/>  <param name="srt"  value="0.0001"/>
-    <param name="str"  value="0.0001"/>  <param name="stt"  value="0.0001"/>
-
-    <param name="lsigma"             value="0.025"/>       <!-- 不太信任扫描匹配 -->
-    <param name="minimumScore"        value="0"/>           <!-- 接受所有匹配 -->
-    <param name="linearUpdate"        value="0.2"/>
-    <param name="angularUpdate"       value="0.2"/>
-    <param name="temporalUpdate"      value="0.3"/>
-    <param name="resampleThreshold"   value="0.5"/>
-    <param name="iterations"          value="2"/>
-
-    <param name="xmin" value="-25.0"/>  <param name="ymin" value="-40.0"/>
-    <param name="xmax" value="25.0"/>   <param name="ymax" value="40.0"/>
-  </node>
-
-  <!-- ============= 8. RViz 可视化 ============= -->
+  <!-- ============= 7. RViz 可视化 ============= -->
   <arg name="rviz" default="false"/>
   <node pkg="rviz" type="rviz" name="rviz"
         args="-d $(find autonomous_navigation)/rviz/nav_mapping.rviz"

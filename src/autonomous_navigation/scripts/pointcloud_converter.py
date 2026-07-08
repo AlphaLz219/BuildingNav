@@ -20,24 +20,24 @@ class PointCloudConverter:
         if len(cloud_in.points) == 0:
             return
 
-        # 构建 PointCloud2 的 fields
-        fields = [
-            PointField(name="x",      offset=0,  datatype=PointField.FLOAT32, count=1),
-            PointField(name="y",      offset=4,  datatype=PointField.FLOAT32, count=1),
-            PointField(name="z",      offset=8,  datatype=PointField.FLOAT32, count=1),
-        ]
-        # 如果有 intensity channel，也保留
-        has_intensity = False
-        point_step = 12  # x,y,z = 3 * float32 = 12 bytes
-        intensity_offset = 12
+        # 查找 intensity channel（可能有不同名称）
+        intensity_ch = None
         for ch in cloud_in.channels:
-            if ch.name in ("intensity", "intensities"):
-                fields.append(PointField(name="intensity", offset=intensity_offset,
-                                         datatype=PointField.FLOAT32, count=1))
-                has_intensity = True
-                point_step = 16  # +1 float32
+            low = ch.name.lower()
+            if "intensity" in low or ch.name == "i" or "reflect" in low:
+                intensity_ch = ch
+                break
 
-        # 打包数据
+        # 始终包含 intensity，Fast-LIO 需要这个字段
+        fields = [
+            PointField(name="x",         offset=0,  datatype=PointField.FLOAT32, count=1),
+            PointField(name="y",         offset=4,  datatype=PointField.FLOAT32, count=1),
+            PointField(name="z",         offset=8,  datatype=PointField.FLOAT32, count=1),
+            PointField(name="intensity", offset=12, datatype=PointField.FLOAT32, count=1),
+        ]
+        point_step = 16
+        fmt = "<ffff"
+
         cloud_out = PointCloud2()
         cloud_out.header = cloud_in.header
         cloud_out.height = 1
@@ -48,17 +48,10 @@ class PointCloudConverter:
         cloud_out.row_step = point_step * cloud_out.width
         cloud_out.is_dense = True
 
-        fmt = "<fff"
-        if has_intensity:
-            fmt += "f"
-
         buf = bytearray()
         for i, pt in enumerate(cloud_in.points):
-            if has_intensity:
-                intensity = cloud_in.channels[0].values[i]
-                buf.extend(struct.pack(fmt, pt.x, pt.y, pt.z, intensity))
-            else:
-                buf.extend(struct.pack(fmt, pt.x, pt.y, pt.z))
+            intensity = intensity_ch.values[i] if intensity_ch else 0.0
+            buf.extend(struct.pack(fmt, pt.x, pt.y, pt.z, intensity))
 
         cloud_out.data = bytes(buf)
         self._pub.publish(cloud_out)

@@ -1,0 +1,38 @@
+common:
+    lid_topic:  "/scan2"
+    imu_topic:  "/livox/imu"
+    time_sync_en: false
+    time_offset_lidar_to_imu: 0.0
+
+preprocess:
+    lidar_type: 4
+    scan_line: 1
+    blind: 0.5
+
+imu:
+    gravity_align: true           # 强制对齐重力方向，防止地图倾斜
+
+mapping:
+    acc_cov: 0.1
+    gyr_cov: 0.1
+    b_acc_cov: 0.0001
+    b_gyr_cov: 0.0001
+    fov_degree:    360
+    det_range:     100.0
+    extrinsic_est_en:  false
+    # LiDAR → IMU 外参 (laser_livox → livox_imu_link)
+    # 从 URDF 计算: laser_livox→livox_base(0,0,0) + livox_base→livox(-0.012,0,0.047) + livox→livox_imu(-0.011,-0.02329,0.04412)
+    extrinsic_T: [ -0.023, -0.02329, 0.09112 ]
+    extrinsic_R: [ 1, 0, 0,
+                   0, 1, 0,
+                   0, 0, 1]
+
+publish:
+    path_en:  true
+    scan_publish_en:  true
+    dense_publish_en: true
+    scan_bodyframe_pub_en: true
+
+pcd_save:
+    pcd_save_en: false
+    interval: -1
