@@ -18,9 +18,11 @@ MAP_WIDTH_CELLS  = 1200
 MAP_HEIGHT_CELLS = 1600
 PUBLISH_RATE     = 2.0
 MAX_POINTS       = 500000
-# Z 切片范围 (camera_init 系): 地板约在 z=-0.16 ~ z=0.2 高度
-Z_MIN            = -0.5
-Z_MAX            = 0.8
+# Z 高度阈值：低于此值的点视为地面（标记空闲），高于此值的视为障碍物
+GROUND_Z_THRESH  = 0.12   # 地面点 z < 0.12 → 空闲
+WALL_Z_MIN       = 0.12   # 墙壁点 z >= 0.12 → 占用  
+WALL_Z_MAX       = 2.0    # 超过 2m 忽略
+FREE_RADIUS      = 0.8    # 机器人周围强制空闲半径 (m)
 
 
 class PointCloudTo2DMap:
@@ -33,7 +35,7 @@ class PointCloudTo2DMap:
         self._pub_map = rospy.Publisher("/map", OccupancyGrid, queue_size=5, latch=True)
         self._sub_cloud = rospy.Subscriber("/cloud_registered", PointCloud2, self._cloud_cb)
         self._sub_odom = rospy.Subscriber("/Odometry", Odometry, self._odom_cb)
-        rospy.loginfo("3D→2D Map projector ready   Z range: [%.1f, %.1f]", Z_MIN, Z_MAX)
+        rospy.loginfo("3D→2D Map ready | ground < %.2f | wall >= %.2f", GROUND_Z_THRESH, WALL_Z_MIN)
 
     def _odom_cb(self, msg: Odometry):
         p = msg.pose.pose.position
@@ -59,22 +61,30 @@ class PointCloudTo2DMap:
         return None
 
     def _update_map(self):
-        """增量更新：不清空旧格子，只追加新点 → 占用。"""
+        """地面点 → 空闲，墙壁点 → 占用。不清空旧格子。"""
+        n_free = 0
         n_occupied = 0
         for x, y, z in self._accumulated_pts:
-            if z < Z_MIN or z > Z_MAX:
-                continue
-            idx = self._xy_to_index(x, y)
-            if idx is None:
-                continue
-            if self._grid[idx[1], idx[0]] < 50:
+            # 地面点 → 空闲
+            if z < GROUND_Z_THRESH:
+                idx = self._xy_to_index(x, y)
+                if idx is None:
+                    continue
+                if self._grid[idx[1], idx[0]] <= 0:
+                    self._grid[idx[1], idx[0]] = 0
+                    n_free += 1
+            # 墙壁/障碍物 → 占用
+            elif WALL_Z_MIN <= z <= WALL_Z_MAX:
+                idx = self._xy_to_index(x, y)
+                if idx is None:
+                    continue
                 self._grid[idx[1], idx[0]] = 100
                 n_occupied += 1
 
-        # 机器人周围标记空闲
+        # 机器人周围强制空闲
         robot_idx = self._xy_to_index(self._robot_x, self._robot_y)
         if robot_idx is not None:
-            r = int(0.6 / MAP_RESOLUTION)  # 0.6m 半径
+            r = int(FREE_RADIUS / MAP_RESOLUTION)
             for di in range(-r, r + 1):
                 for dj in range(-r, r + 1):
                     if di*di + dj*dj > r*r:
@@ -84,7 +94,7 @@ class PointCloudTo2DMap:
                         if self._grid[nj, ni] <= 0:
                             self._grid[nj, ni] = 0
 
-        return n_occupied
+        return n_free + n_occupied
 
     def _publish_map(self):
         msg = OccupancyGrid()

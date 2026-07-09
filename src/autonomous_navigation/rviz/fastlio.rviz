@@ -5,6 +5,7 @@ Panels:
     Property Tree Widget:
       Expanded:
         - /Global Options1
+        - /RobotModel1
         - /Odometry1
       Splitter Ratio: 0.5
     Tree Height: 1076
@@ -31,7 +32,7 @@ Toolbars:
 Visualization Manager:
   Class: ""
   Displays:
-    - Alpha: 0.7
+    - Alpha: 0.699999988079071
       Class: rviz/Map
       Color Scheme: map
       Draw Behind: false
@@ -44,8 +45,8 @@ Visualization Manager:
     - Alpha: 1
       Autocompute Intensity Bounds: true
       Autocompute Value Bounds:
-        Max Value: 5.085517883300781
-        Min Value: -2.4309678077697754
+        Max Value: 656.0244750976562
+        Min Value: 637.7329711914062
         Value: true
       Axis: Z
       Channel Name: intensity
@@ -118,15 +119,11 @@ Visualization Manager:
           Value: true
         laser_livox:
           Value: true
-        laser_livox_level:
-          Value: true
         livox:
           Value: true
         livox_base:
           Value: true
         livox_imu_link:
-          Value: true
-        map:
           Value: true
         odom:
           Value: true
@@ -144,7 +141,6 @@ Visualization Manager:
         camera_init:
           body:
             {}
-        map:
           odom:
             base_footprint:
               base_link:
@@ -157,8 +153,6 @@ Visualization Manager:
                     livox:
                       livox_imu_link:
                         {}
-                laser_livox_level:
-                  {}
                 wheel_left_link:
                   {}
                 wheel_right_link:
@@ -167,7 +161,7 @@ Visualization Manager:
       Value: true
     - Alpha: 1
       Class: rviz/RobotModel
-      Collision Enabled: false
+      Collision Enabled: true
       Enabled: true
       Links:
         All Links Enabled: true
@@ -296,7 +290,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 21.10043716430664
+      Distance: 63.89500045776367
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -304,17 +298,17 @@ Visualization Manager:
         Value: false
       Field of View: 0.7853981852531433
       Focal Point:
-        X: 2.622213363647461
-        Y: 1.165952444076538
-        Z: 0.4457598924636841
+        X: 0.4925229549407959
+        Y: 2.7635538578033447
+        Z: 0.9200055003166199
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 1.5697963237762451
+      Pitch: 0.3147968053817749
       Target Frame: <Fixed Frame>
-      Yaw: 4.725015163421631
+      Yaw: 3.9400129318237305
     Saved: ~
 Window Geometry:
   Displays:
@@ -333,4 +327,4 @@ Window Geometry:
     collapsed: false
   Width: 1961
   X: 324
-  Y: 97
+  Y: 23
