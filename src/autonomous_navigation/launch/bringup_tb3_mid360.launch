@@ -3,8 +3,8 @@
   <!-- ======================== 参数 ======================== -->
   <arg name="world_file"   default="$(find autonomous_navigation)/../../generated_building/competition_scene.world"
                            doc="比赛场景世界文件"/>
-  <arg name="robot_x"      default="0.0"    doc="机器人出生点 X (m)"/>
-  <arg name="robot_y"      default="2.0"   doc="机器人出生点 Y (m)"/>
+  <arg name="robot_x"      default="-5.0"    doc="机器人出生点 X (m)"/>
+  <arg name="robot_y"      default="15.0"   doc="机器人出生点 Y (m)"/>
   <arg name="robot_z"      default="0.0"    doc="机器人出生点 Z (m)"/>
   <arg name="robot_yaw"    default="1.5708" doc="机器人朝向 yaw (rad)，默认 π/2 面朝建筑入口"/>
   <arg name="gui"          default="true"/>
@@ -51,9 +51,9 @@
   <!-- ============= 5.5 水平激光坐标系（修复 pitch=45° 不平面问题） ========= -->
   <!--     Mid360 安装有 45° 俯仰，pointcloud_to_laserscan 要求 target_frame Z 轴竖直 -->
   <!--     创建与 base_link 平行的虚拟坐标系，位于 laser_livox 相同位置        -->
-  <node pkg="tf" type="static_transform_publisher"
+  <!-- <node pkg="tf" type="static_transform_publisher"
         name="laser_livox_level_tf"
-        args="0.04 0 0.16 0 0 0 base_link laser_livox_level 100"/>
+        args="0.04 0 0.16 0 0 0 base_link laser_livox_level 100"/> -->
 
   <!-- ============= 6. 3D 点云 → 2D 激光扫描 ============= -->
   <!--     从 Mid360 点云中提取地面附近一层，供 GMapping 建图使用       -->
@@ -62,7 +62,7 @@
     <remap from="cloud_in"  to="/scan2"/>
     <remap from="scan"      to="/scan_2d"/>
 
-    <param name="target_frame"        value="laser_livox_level"/>
+    <param name="target_frame"        value="laser_livox"/>
     <param name="transform_tolerance" value="0.05"/>
     <!-- 雷达距地 ~0.16m，地板 z≈-0.16，取 -0.20~0.05 捕获墙壁立面 -->
     <param name="min_height"          value="-0.20"/>
