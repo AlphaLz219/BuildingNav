@@ -52,12 +52,13 @@
   <node pkg="autonomous_navigation" type="pointcloud_to_custommsg.py"
         name="pointcloud_to_custommsg" output="screen"/>
 
-  <!-- ============= 5.5 水平激光坐标系（修复 pitch=45° 不平面问题） ========= -->
-  <!--     Mid360 安装有 45° 俯仰，pointcloud_to_laserscan 要求 target_frame Z 轴竖直 -->
-  <!--     创建与 base_link 平行的虚拟坐标系，位于 laser_livox 相同位置        -->
+  <!-- ============= 5.5 水平激光坐标系 ========= -->
+  <!--     Mid360 前倾45°安装，pointcloud_to_laserscan 要求 target_frame Z 轴竖直 -->
+  <!--     创建与 base_link 平行的虚拟坐标系，位于 laser_livox 相同位置但无俯仰 -->
+  <!--     如果需要启用 pointcloud_to_laserscan，取消注释此 TF 并改 target_frame 为 laser_livox_level -->
   <!-- <node pkg="tf" type="static_transform_publisher"
         name="laser_livox_level_tf"
-        args="0.04 0 0.16 0 0 0 base_link laser_livox_level 100"/> -->
+        args="0.04 0 0.4 0 0 0 base_link laser_livox_level 100"/> -->
 
   <!-- ============= 6. 3D 点云 → 2D 激光扫描 =============
       从 Mid360 点云中提取地面附近一层，供 GMapping 建图使用       -->

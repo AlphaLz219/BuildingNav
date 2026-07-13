@@ -17,9 +17,11 @@ mapping:
     fov_degree:    360
     det_range:     100.0
     extrinsic_est_en:  false
-    # LiDAR → IMU 外参 (laser_livox → livox_imu_link)
-    # 从 URDF 计算: laser_livox→livox_base(0,0,0) + livox_base→livox(-0.012,0,0.047) + livox→livox_imu(-0.011,-0.02329,0.04412)
+    # LiDAR → IMU 外参: laser_livox → livox_imu_link 内部偏移
+    # 这是 Mid-360 内部硬件偏移，不受安装角度/高度影响
+    # laser_livox→livox_base(0,0,0) + livox_base→livox(-0.012,0,0.047) + livox→livox_imu(-0.011,-0.02329,0.04412)
     extrinsic_T: [ -0.023, -0.02329, 0.09112 ]
+    # LiDAR 与 IMU 在 Mid-360 内部轴向一致，无论安装角度 extrinsic_R 均为单位矩阵
     extrinsic_R: [ 1, 0, 0,
                    0, 1, 0,
                    0, 0, 1]

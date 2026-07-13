@@ -12,7 +12,7 @@
   <param name="point_filter_num"       type="int"   value="1"/>    <!-- 2→1，多留点 -->
   <param name="max_iteration"          type="int"   value="4"/>    <!-- 3→4，多迭代一次 -->
   <param name="filter_size_surf"       type="double" value="0.2"/> <!-- 0.3→0.2，更细 -->
-  <param name="filter_size_map"        type="double" value="0.2"/>
+  <param name="filter_size_map"        type="double" value="0.3"/>
 
   <!-- Fast-LIO 核心节点 -->
   <node pkg="fast_lio" type="fastlio_mapping"
@@ -23,15 +23,18 @@
         name="tf_bridge" output="screen"/> -->
 
     <!-- 静态映射: map → odom → camera_init → body → base_footprint -->
+    <!-- Fast-LIO 已修复: camera_init 帧水平对齐（从加速度计估计初始旋转） -->
   <node pkg="tf" type="static_transform_publisher"
         name="map_to_odom_tf"
         args="0 0 0 0 0 0 map odom 100"/>
   <node pkg="tf" type="static_transform_publisher"
         name="odom_to_camera_tf"
         args="0 0 0 0 0 0 odom camera_init 100"/>
+  <!-- body→base_footprint: IMU(后仰45°) → 机器人底盘(水平)
+       旋转R_y(-45°)消除IMU倾斜，平移为倾斜坐标系下的偏移 -->
   <node pkg="tf" type="static_transform_publisher"
         name="body_to_base_tf"
-        args="-0.017 0.02329 -0.26112 0 0 0 body base_footprint 100"/>
+        args="0.2846 0.02329 -0.4093 0 -0.7854 0 body base_footprint 100"/>
   <!-- <node pkg="autonomous_navigation" type="lio_to_base.py"
       name="lio_to_base" output="screen"/>       -->
 

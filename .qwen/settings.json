@@ -7,7 +7,8 @@
       "Bash(source *)",
       "Bash(sleep *)",
       "Bash(kill *)",
-      "Bash(wait)"
+      "Bash(wait)",
+      "Bash(catkin_make *)"
     ]
   },
   "$version": 4

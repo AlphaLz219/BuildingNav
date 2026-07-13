@@ -13,7 +13,7 @@ from sensor_msgs.msg import PointCloud
 from autonomous_navigation.msg import CustomMsg, CustomPoint
 
 LIVOX_SCAN_LINE = 6           # Mid-360 有 6 条扫描线
-SCAN_PERIOD_US  = 100000      # 10Hz → 100ms = 100000μs
+SCAN_PERIOD_NS  = 100_000_000 # 10Hz → 100ms = 1亿纳秒 (Livox 协议单位)
 
 
 class PointCloudToCustomMsg:
@@ -30,11 +30,11 @@ class PointCloudToCustomMsg:
 
         msg = CustomMsg()
         msg.header = cloud.header
-        msg.timebase = cloud.header.stamp.to_nsec()
+        msg.timebase = cloud.header.stamp.to_nsec() - SCAN_PERIOD_NS  # 帧首时刻
         msg.lidar_id = 1
         msg.rsvd = [0, 0, 0]
 
-        dt_per_point = float(SCAN_PERIOD_US) / float(n)
+        dt_per_point = float(SCAN_PERIOD_NS) / float(n)
 
         for i, pt in enumerate(cloud.points):
             cp = CustomPoint()

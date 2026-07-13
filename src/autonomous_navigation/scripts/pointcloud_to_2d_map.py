@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 """3D 点云 → 2D 占据栅格投影。
 
-从 Fast-LIO 的 /cloud_registered 累积点云，按固定 Z 高度范围投影到 2D 栅格，
+从 Fast-LIO 的 /cloud_registered 累积点云，按 Z 高度范围投影到 2D 栅格，
 发布 /map (nav_msgs/OccupancyGrid)。栅格只增长不清空，形成持续扩展的地图。
+
+Fast-LIO 已修复初始旋转估计，camera_init 帧水平对齐（重力方向）。
 """
 import numpy as np
 import rospy
 from sensor_msgs.msg import PointCloud2
-from nav_msgs.msg import Odometry, OccupancyGrid
+from nav_msgs.msg import Odometry, OccupancyGrid, MapMetaData
 import sensor_msgs.point_cloud2 as pc2
 
 # ======================== 参数 ========================
@@ -18,10 +20,11 @@ MAP_WIDTH_CELLS  = 1000
 MAP_HEIGHT_CELLS = 1600
 PUBLISH_RATE     = 2.0
 MAX_POINTS       = 500000
-# Z 高度阈值（camera_init 坐标系：LiDAR 首帧在地面以上 ~0.16m）
-GROUND_Z_THRESH  = -0.00  # z < -0.05 → 地面点，标记空闲
-WALL_Z_MIN       = -0.00  # -0.05 ≤ z ≤ 2.0 → 障碍物
+# Z 高度阈值（camera_init 坐标系：重力对齐，Z 轴竖直向上）
+GROUND_Z_THRESH  = -0.20   # z < 0.05m → 地面点，标记空闲
+WALL_Z_MIN       = -0.20   # 0.05m ≤ z ≤ 2.0m → 障碍物
 WALL_Z_MAX       = 2.0
+FREE_RADIUS      = 0.8    # 机器人周围强制空闲半径 (m)
 
 
 class PointCloudTo2DMap:
@@ -34,7 +37,8 @@ class PointCloudTo2DMap:
         self._pub_map = rospy.Publisher("/map", OccupancyGrid, queue_size=5, latch=True)
         self._sub_cloud = rospy.Subscriber("/cloud_registered", PointCloud2, self._cloud_cb)
         self._sub_odom = rospy.Subscriber("/Odometry", Odometry, self._odom_cb)
-        rospy.loginfo("3D→2D Map ready | ground < %.2f | wall >= %.2f", GROUND_Z_THRESH, WALL_Z_MIN)
+        rospy.loginfo("3D→2D Map ready | frame=camera_init | ground < %.2f | wall %.2f~%.2f",
+                       GROUND_Z_THRESH, WALL_Z_MIN, WALL_Z_MAX)
 
     def _odom_cb(self, msg: Odometry):
         p = msg.pose.pose.position
@@ -60,11 +64,9 @@ class PointCloudTo2DMap:
         return None
 
     def _update_map(self):
-        """地面点 → 空闲，墙壁点 → 占用。不清空旧格子。"""
         n_free = 0
         n_occupied = 0
         for x, y, z in self._accumulated_pts:
-            # 地面点 → 空闲
             if z < GROUND_Z_THRESH:
                 idx = self._xy_to_index(x, y)
                 if idx is None:
@@ -72,7 +74,6 @@ class PointCloudTo2DMap:
                 if self._grid[idx[1], idx[0]] <= 0:
                     self._grid[idx[1], idx[0]] = 0
                     n_free += 1
-            # 墙壁/障碍物 → 占用
             elif WALL_Z_MIN <= z <= WALL_Z_MAX:
                 idx = self._xy_to_index(x, y)
                 if idx is None:
@@ -83,7 +84,7 @@ class PointCloudTo2DMap:
         # 机器人周围强制空闲
         robot_idx = self._xy_to_index(self._robot_x, self._robot_y)
         if robot_idx is not None:
-            r = int(0.8 / MAP_RESOLUTION)  # 机器人周围 0.8m 强制空闲
+            r = int(FREE_RADIUS / MAP_RESOLUTION)
             for di in range(-r, r + 1):
                 for dj in range(-r, r + 1):
                     if di*di + dj*dj > r*r:
@@ -99,13 +100,17 @@ class PointCloudTo2DMap:
         msg = OccupancyGrid()
         msg.header.stamp = rospy.Time.now()
         msg.header.frame_id = "camera_init"
-        msg.info.resolution = MAP_RESOLUTION
-        msg.info.width      = MAP_WIDTH_CELLS
-        msg.info.height     = MAP_HEIGHT_CELLS
-        msg.info.origin.position.x = MAP_ORIGIN_X
-        msg.info.origin.position.y = MAP_ORIGIN_Y
-        msg.info.origin.position.z = 0.0
-        msg.info.origin.orientation.w = 1.0
+
+        info = MapMetaData()
+        info.resolution = MAP_RESOLUTION
+        info.width = MAP_WIDTH_CELLS
+        info.height = MAP_HEIGHT_CELLS
+        info.origin.position.x = MAP_ORIGIN_X
+        info.origin.position.y = MAP_ORIGIN_Y
+        info.origin.position.z = 0.0
+        info.origin.orientation.w = 1.0
+        msg.info = info
+
         msg.data = self._grid.flatten().tolist()
         self._pub_map.publish(msg)
 

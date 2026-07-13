@@ -45,8 +45,8 @@ Visualization Manager:
     - Alpha: 1
       Autocompute Intensity Bounds: true
       Autocompute Value Bounds:
-        Max Value: 2.3528366088867188
-        Min Value: -0.1863744556903839
+        Max Value: 2.099078893661499
+        Min Value: -0.38469016551971436
         Value: true
       Axis: Z
       Channel Name: intensity
@@ -143,23 +143,22 @@ Visualization Manager:
         map:
           odom:
             camera_init:
-              base_footprint:
-                base_link:
-                  caster_back_link:
-                    {}
-                  imu_link:
-                    {}
-                  laser_livox:
-                    livox_base:
-                      livox:
-                        livox_imu_link:
-                          {}
-                  wheel_left_link:
-                    {}
-                  wheel_right_link:
-                    {}
               body:
-                {}
+                base_footprint:
+                  base_link:
+                    caster_back_link:
+                      {}
+                    imu_link:
+                      {}
+                    laser_livox:
+                      livox_base:
+                        livox:
+                          livox_imu_link:
+                            {}
+                    wheel_left_link:
+                      {}
+                    wheel_right_link:
+                      {}
       Update Interval: 0
       Value: true
     - Alpha: 1
@@ -293,7 +292,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 13.545129776000977
+      Distance: 8.633464813232422
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -301,17 +300,17 @@ Visualization Manager:
         Value: false
       Field of View: 0.7853981852531433
       Focal Point:
-        X: 0.4925229549407959
-        Y: 2.7635538578033447
-        Z: 0.9200055003166199
+        X: 3.821824789047241
+        Y: -0.3423633575439453
+        Z: -1.3008595705032349
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.5947961211204529
+      Pitch: 0.8597965240478516
       Target Frame: <Fixed Frame>
-      Yaw: 4.70501708984375
+      Yaw: 4.720021724700928
     Saved: ~
 Window Geometry:
   Displays:
@@ -329,5 +328,5 @@ Window Geometry:
   Views:
     collapsed: false
   Width: 2327
-  X: 0
-  Y: 20
+  X: -670
+  Y: 52
