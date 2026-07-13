@@ -13,10 +13,10 @@ imu:
     gravity_align: true           # 强制对齐重力方向，防止地图倾斜
 
 mapping:
-    acc_cov: 0.1
-    gyr_cov: 0.1
-    b_acc_cov: 0.0001
-    b_gyr_cov: 0.0001
+    acc_cov: 0.01          # 0.1→0.01，仿真IMU极准，极度信任
+    gyr_cov: 0.01          # 0.1→0.01，减少旋转漂移
+    b_acc_cov: 0.00001     # 偏置估计更慢但更稳
+    b_gyr_cov: 0.00001
     fov_degree:    360
     det_range:     100.0
     extrinsic_est_en:  false

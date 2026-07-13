@@ -230,7 +230,7 @@
       <odometryTopic>Odometry_gazebo</odometryTopic>
       <odometryFrame>odom</odometryFrame>
       <odometrySource>world</odometrySource>
-      <publishOdomTF>true</publishOdomTF>
+      <publishOdomTF>false</publishOdomTF>
       <robotBaseFrame>base_footprint</robotBaseFrame>
       <publishWheelTF>false</publishWheelTF>
       <publishTf>true</publishTf>
