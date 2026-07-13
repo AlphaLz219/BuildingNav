@@ -19,8 +19,8 @@ MAP_HEIGHT_CELLS = 1600
 PUBLISH_RATE     = 2.0
 MAX_POINTS       = 500000
 # Z 高度阈值（camera_init 坐标系：LiDAR 首帧在地面以上 ~0.16m）
-GROUND_Z_THRESH  = -0.02  # z < -0.05 → 地面点，标记空闲
-WALL_Z_MIN       = -0.02  # -0.05 ≤ z ≤ 2.0 → 障碍物
+GROUND_Z_THRESH  = -0.00  # z < -0.05 → 地面点，标记空闲
+WALL_Z_MIN       = -0.00  # -0.05 ≤ z ≤ 2.0 → 障碍物
 WALL_Z_MAX       = 2.0
 
 

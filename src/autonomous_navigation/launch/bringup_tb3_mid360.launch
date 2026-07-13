@@ -59,17 +59,17 @@
         name="laser_livox_level_tf"
         args="0.04 0 0.16 0 0 0 base_link laser_livox_level 100"/> -->
 
-  <!-- ============= 6. 3D 点云 → 2D 激光扫描 ============= -->
-  <!--     从 Mid360 点云中提取地面附近一层，供 GMapping 建图使用       -->
-  <node pkg="pointcloud_to_laserscan" type="pointcloud_to_laserscan_node"
+  <!-- ============= 6. 3D 点云 → 2D 激光扫描 =============
+      从 Mid360 点云中提取地面附近一层，供 GMapping 建图使用       -->
+  <!-- <node pkg="pointcloud_to_laserscan" type="pointcloud_to_laserscan_node"
         name="pointcloud_to_laserscan">
     <remap from="cloud_in"  to="/scan2"/>
     <remap from="scan"      to="/scan_2d"/>
 
     <param name="target_frame"        value="laser_livox"/>
-    <param name="transform_tolerance" value="0.05"/>
+    <param name="transform_tolerance" value="0.05"/> -->
     <!-- 雷达距地 ~0.16m，地板 z≈-0.16，取 -0.20~0.05 捕获墙壁立面 -->
-    <param name="min_height"          value="-0.20"/>
+    <!-- <param name="min_height"          value="-0.20"/>
     <param name="max_height"          value="0.05"/>
     <param name="angle_min"           value="-3.14159"/>
     <param name="angle_max"           value="3.14100"/>
@@ -77,7 +77,7 @@
     <param name="range_min"           value="0.1"/>
     <param name="range_max"           value="30.0"/>
     <param name="concurrency_level"   value="1"/>
-  </node>
+  </node>  -->
 
   <!-- ============= 7. RViz 可视化 ============= -->
   <arg name="rviz" default="false"/>
