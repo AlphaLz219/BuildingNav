@@ -7,22 +7,21 @@
 import numpy as np
 import rospy
 from sensor_msgs.msg import PointCloud2
-from nav_msgs.msg import Odometry, OccupancyGrid, MapMetaData
+from nav_msgs.msg import Odometry, OccupancyGrid
 import sensor_msgs.point_cloud2 as pc2
 
 # ======================== 参数 ========================
 MAP_RESOLUTION   = 0.05
-MAP_ORIGIN_X     = -20.0
-MAP_ORIGIN_Y     = -10.0
-MAP_WIDTH_CELLS  = 1200
+MAP_ORIGIN_X     = -25.0
+MAP_ORIGIN_Y     = -40.0
+MAP_WIDTH_CELLS  = 1000
 MAP_HEIGHT_CELLS = 1600
 PUBLISH_RATE     = 2.0
 MAX_POINTS       = 500000
-# Z 高度阈值：低于此值的点视为地面（标记空闲），高于此值的视为障碍物
-GROUND_Z_THRESH  = 0.12   # 地面点 z < 0.12 → 空闲
-WALL_Z_MIN       = 0.12   # 墙壁点 z >= 0.12 → 占用  
-WALL_Z_MAX       = 2.0    # 超过 2m 忽略
-FREE_RADIUS      = 0.8    # 机器人周围强制空闲半径 (m)
+# Z 高度阈值（camera_init 坐标系：LiDAR 首帧在地面以上 ~0.16m）
+GROUND_Z_THRESH  = -0.02  # z < -0.05 → 地面点，标记空闲
+WALL_Z_MIN       = -0.02  # -0.05 ≤ z ≤ 2.0 → 障碍物
+WALL_Z_MAX       = 2.0
 
 
 class PointCloudTo2DMap:
@@ -84,7 +83,7 @@ class PointCloudTo2DMap:
         # 机器人周围强制空闲
         robot_idx = self._xy_to_index(self._robot_x, self._robot_y)
         if robot_idx is not None:
-            r = int(FREE_RADIUS / MAP_RESOLUTION)
+            r = int(0.8 / MAP_RESOLUTION)  # 机器人周围 0.8m 强制空闲
             for di in range(-r, r + 1):
                 for dj in range(-r, r + 1):
                     if di*di + dj*dj > r*r:
@@ -100,15 +99,9 @@ class PointCloudTo2DMap:
         msg = OccupancyGrid()
         msg.header.stamp = rospy.Time.now()
         msg.header.frame_id = "camera_init"
-        msg.info = MapMetaData(
-            resolution=MAP_RESOLUTION,
-            width=MAP_WIDTH_CELLS,
-            height=MAP_HEIGHT_CELLS,
-            origin=msg.info.origin
-        )
         msg.info.resolution = MAP_RESOLUTION
-        msg.info.width = MAP_WIDTH_CELLS
-        msg.info.height = MAP_HEIGHT_CELLS
+        msg.info.width      = MAP_WIDTH_CELLS
+        msg.info.height     = MAP_HEIGHT_CELLS
         msg.info.origin.position.x = MAP_ORIGIN_X
         msg.info.origin.position.y = MAP_ORIGIN_Y
         msg.info.origin.position.z = 0.0

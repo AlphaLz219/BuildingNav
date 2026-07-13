@@ -1,20 +1,17 @@
 common:
-    lid_topic:  "/scan2"
+    lid_topic:  "/livox/lidar"
     imu_topic:  "/livox/imu"
     time_sync_en: false
     time_offset_lidar_to_imu: 0.0
 
 preprocess:
-    lidar_type: 4
-    scan_line: 1
+    lidar_type: 1                # 1 = AVIA（Mid360 原生模式，用 CustomMsg）
+    scan_line: 4
     blind: 0.5
 
-imu:
-    gravity_align: true           # 强制对齐重力方向，防止地图倾斜
-
 mapping:
-    acc_cov: 0.01          # 0.1→0.01，仿真IMU极准，极度信任
-    gyr_cov: 0.01          # 0.1→0.01，减少旋转漂移
+    acc_cov: 0.1          # 0.1→0.01，仿真IMU极准，极度信任
+    gyr_cov: 0.1          # 0.1→0.01，减少旋转漂移
     b_acc_cov: 0.00001     # 偏置估计更慢但更稳
     b_gyr_cov: 0.00001
     fov_degree:    360

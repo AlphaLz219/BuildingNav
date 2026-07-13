@@ -48,6 +48,10 @@
   <node pkg="autonomous_navigation" type="pointcloud_converter.py"
         name="pointcloud_converter" output="screen"/>
 
+  <!-- ============= 5.1 点云 → CustomMsg（Fast-LIO Avia 模式） ========= -->
+  <node pkg="autonomous_navigation" type="pointcloud_to_custommsg.py"
+        name="pointcloud_to_custommsg" output="screen"/>
+
   <!-- ============= 5.5 水平激光坐标系（修复 pitch=45° 不平面问题） ========= -->
   <!--     Mid360 安装有 45° 俯仰，pointcloud_to_laserscan 要求 target_frame Z 轴竖直 -->
   <!--     创建与 base_link 平行的虚拟坐标系，位于 laser_livox 相同位置        -->

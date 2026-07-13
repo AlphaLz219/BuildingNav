@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Agent(Explore)",
+      "Bash(python3 *)",
+      "Bash(xmllint *)",
+      "Bash(source *)",
+      "Bash(sleep *)",
+      "Bash(kill *)",
+      "Bash(wait)"
+    ]
+  },
+  "$version": 4
+}

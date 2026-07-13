@@ -45,8 +45,8 @@ Visualization Manager:
     - Alpha: 1
       Autocompute Intensity Bounds: true
       Autocompute Value Bounds:
-        Max Value: 2.3049662113189697
-        Min Value: -0.11882741749286652
+        Max Value: 2.3528366088867188
+        Min Value: -0.1863744556903839
         Value: true
       Axis: Z
       Channel Name: intensity
@@ -141,30 +141,30 @@ Visualization Manager:
       Show Names: true
       Tree:
         map:
-          camera_init:
-            body:
-              {}
           odom:
-            base_footprint:
-              base_link:
-                caster_back_link:
-                  {}
-                imu_link:
-                  {}
-                laser_livox:
-                  livox_base:
-                    livox:
-                      livox_imu_link:
-                        {}
-                wheel_left_link:
-                  {}
-                wheel_right_link:
-                  {}
+            camera_init:
+              base_footprint:
+                base_link:
+                  caster_back_link:
+                    {}
+                  imu_link:
+                    {}
+                  laser_livox:
+                    livox_base:
+                      livox:
+                        livox_imu_link:
+                          {}
+                  wheel_left_link:
+                    {}
+                  wheel_right_link:
+                    {}
+              body:
+                {}
       Update Interval: 0
       Value: true
     - Alpha: 1
       Class: rviz/RobotModel
-      Collision Enabled: true
+      Collision Enabled: false
       Enabled: true
       Links:
         All Links Enabled: true
@@ -269,7 +269,7 @@ Visualization Manager:
   Global Options:
     Background Color: 48; 48; 48
     Default Light: true
-    Fixed Frame: map
+    Fixed Frame: camera_init
     Frame Rate: 30
   Name: root
   Tools:
@@ -293,7 +293,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 12.126670837402344
+      Distance: 13.545129776000977
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -309,9 +309,9 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.2947966158390045
+      Pitch: 0.5947961211204529
       Target Frame: <Fixed Frame>
-      Yaw: 4.665018081665039
+      Yaw: 4.70501708984375
     Saved: ~
 Window Geometry:
   Displays:
@@ -329,5 +329,5 @@ Window Geometry:
   Views:
     collapsed: false
   Width: 2327
-  X: -577
-  Y: 94
+  X: 0
+  Y: 20
