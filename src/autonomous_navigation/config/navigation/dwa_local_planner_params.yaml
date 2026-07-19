@@ -1,0 +1,72 @@
+# ============================================================
+# DWA 局部规划器参数（dwa_local_planner/DWAPlannerROS）
+# 算法：动态窗口法（Dynamic Window Approach），实时生成避障速度指令
+# 适配：TB3 Burger 差速驱动，最大速度 0.22 m/s
+# ============================================================
+
+DWAPlannerROS:
+  # ---- 速度限制 ----
+  # 最大前进速度（m/s），TB3 Burger 最大 0.22 m/s
+  max_vel_x: 0.22
+  # 禁止倒车（设为 0），防止 DWA 在弯道或墙边选择倒车轨迹
+  min_vel_x: -0.2
+  # 横向速度（差速驱动无横向运动能力）
+  max_vel_y: 0.0
+  min_vel_y: 0.0
+  # 平移速度范围（m/s）
+  max_vel_trans: 0.22
+  min_vel_trans: 0.01
+  # 旋转速度范围（rad/s），TB3 Burger 最大约 2.75 rad/s
+  max_vel_theta: 1.5
+  min_vel_theta: -1.5
+
+  # ---- 加速度限制 ----
+  # 线加速度限制（m/s²）
+  acc_lim_x: 0.4
+  # 差速驱动无横向加速度
+  acc_lim_y: 0.0
+  # 角加速度限制（rad/s²）
+  acc_lim_theta: 2.5
+
+  # ---- 机器人类型 ----
+  # false = 差速驱动（非全向移动）
+  holonomic_robot: false
+
+  # ---- 仿真参数 ----
+  # 前向仿真时间（s），越长 DWA 评估越远，敢选更高速度
+  sim_time: 2.5
+  # 线速度采样数量（越多速度选择越精细）
+  vx_samples: 15
+  # 横向速度采样数量（差速驱动为 0）
+  vy_samples: 0
+  # 角速度采样数量
+  vtheta_samples: 20
+  # 仿真步长（s），轨迹离散化精度
+  sim_granularity: 0.025
+
+  # ---- 评价函数权重 ----
+  # 路径跟随权重，适度跟随全局路径
+  path_distance_bias: 24.0
+  # 目标趋近权重，更积极地朝目标移动（穿窄道时更有效）
+  goal_distance_bias: 32.0
+  # 障碍物距离权重，适度远离障碍物
+  occdist_scale: 0.05
+  # 旋转抑制权重，惩罚无意义的原地旋转
+  twirling_scale: 0.5
+  # 停车判定阈值（m），距目标小于此值时开始减速停车
+  stop_threshold: 0.1
+
+  # ---- 振荡检测 ----
+  # 振荡重置距离（m），移动超过此距离后重置振荡计时器
+  oscillation_reset_dist: 0.05
+  # 振荡重置角度（rad），旋转超过此角度后重置振荡计时器
+  oscillation_reset_angle: 0.2
+
+  # ---- 其他 ----
+  # 前向参考点距离（m），用于评估轨迹是否朝向前方
+  forward_point_distance: 0.2
+  # 目标容忍距离（m），到达目标 ±0.15m 视为到达
+  goal_tolerance: 0.15
+
+  # 裁剪已走过的全局路径段，减少规划器计算量
+  prune_plan: true

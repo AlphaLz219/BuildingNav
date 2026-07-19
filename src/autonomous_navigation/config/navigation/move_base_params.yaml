@@ -1,0 +1,49 @@
+# ============================================================
+# move_base 框架参数
+# 协调全局规划器、局部规划器和恢复行为
+# ============================================================
+
+move_base:
+  # ---- 规划器选择 ----
+  # 全局规划器：A* 搜索（global_planner 包）
+  base_global_planner: global_planner/GlobalPlanner
+  # 局部规划器：DWA 动态窗口法
+  base_local_planner: dwa_local_planner/DWAPlannerROS
+
+  # ---- 控制与规划频率 ----
+  # 控制环频率（Hz），每秒发送 10 次 cmd_vel 指令
+  controller_frequency: 10.0
+  # 控制器等待超时（s），若在此时间内未产生有效指令则触发恢复行为
+  # 适当增大，给 DWA 足够时间等待代价地图更新后再尝试
+  controller_patience: 3.0
+  # 全局规划频率（Hz），每秒重新规划 2 次全局路径
+  planner_frequency: 2.0
+  # 全局规划器等待超时（s），若在此时间内未找到路径则触发恢复行为
+  planner_patience: 5.0
+
+  # 最大规划重试次数，超过后触发恢复行为
+  max_planning_retries: 5
+
+  # ---- 振荡检测 ----
+  # 振荡超时（s），机器人在此时间内未有效移动则判定为卡住
+  oscillation_timeout: 10.0
+  # 振荡距离阈值（m），移动小于此值视为未有效移动
+  oscillation_distance: 0.2
+
+  # ---- 恢复行为 ----
+  # 启用恢复行为（当规划或控制失败时自动执行）
+  recovery_behavior_enabled: true
+
+  # 恢复行为执行顺序（依次尝试，直到成功）
+  recovery_behaviors:
+    # 1. 保守清除：清除机器人周围 3m 内的代价地图（消除陈旧障碍标记）
+    - {name: conservative_reset, type: clear_costmap_recovery/ClearCostmapRecovery}
+    # 2. 原地旋转：旋转 360° 让传感器重新扫描环境
+    - {name: rotate_recovery, type: rotate_recovery/RotateRecovery}
+    # 3. 激进清除：清除机器人周围 10m 内的代价地图
+    - {name: aggressive_reset, type: clear_costmap_recovery/ClearCostmapRecovery}
+
+  # 保守清除的作用半径（m）
+  conservative_reset_dist: 3.0
+  # 激进清除的作用半径（m）
+  aggressive_reset_dist: 10.0

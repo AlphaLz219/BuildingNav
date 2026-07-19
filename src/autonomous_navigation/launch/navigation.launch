@@ -1,0 +1,40 @@
+<?xml version="1.0"?>
+<launch>
+  <!-- ===== 导航栈（适配 SLAM Toolbox 建图） ===== -->
+  <!-- 前置条件：先运行 bringup_tb3_mid360_toolbox.launch（Gazebo + SLAM Toolbox） -->
+
+  <!-- ======================== Move Base ======================== -->
+  <node pkg="move_base" type="move_base" name="move_base" respawn="false" output="screen">
+    <param name="base_global_planner" value="global_planner/GlobalPlanner"/>
+    <param name="base_local_planner"  value="dwa_local_planner/DWAPlannerROS"/>
+
+    <!-- 里程计话题：Gazebo diff_drive 发布在 /Odometry_gazebo -->
+    <remap from="odom" to="Odometry_gazebo"/>
+
+    <!-- 加载 costmap 共享参数 -->
+    <rosparam file="$(find autonomous_navigation)/config/navigation/costmap_common_params.yaml"
+              command="load" ns="global_costmap"/>
+    <rosparam file="$(find autonomous_navigation)/config/navigation/costmap_common_params.yaml"
+              command="load" ns="local_costmap"/>
+
+    <!-- 加载各 costmap 独立参数 -->
+    <rosparam file="$(find autonomous_navigation)/config/navigation/global_costmap_params.yaml"
+              command="load"/>
+    <rosparam file="$(find autonomous_navigation)/config/navigation/local_costmap_params.yaml"
+              command="load"/>
+
+    <!-- 加载规划器参数 -->
+    <rosparam file="$(find autonomous_navigation)/config/navigation/global_planner_params.yaml"
+              command="load"/>
+    <rosparam file="$(find autonomous_navigation)/config/navigation/dwa_local_planner_params.yaml"
+              command="load"/>
+    <rosparam file="$(find autonomous_navigation)/config/navigation/move_base_params.yaml"
+              command="load"/>
+  </node>
+
+  <!-- ======================== RViz ======================== -->
+  <arg name="rviz" default="true"/>
+  <node pkg="rviz" type="rviz" name="rviz_navigation"
+        args="-d $(find autonomous_navigation)/rviz/navigation.rviz"
+        if="$(arg rviz)"/>
+</launch>

@@ -1,0 +1,30 @@
+# ============================================================
+# 全局代价地图参数
+# 用途：全局路径规划，基于 SLAM Toolbox 发布的静态地图
+# ============================================================
+
+global_costmap:
+  # 全局参考坐标系（SLAM Toolbox 发布 map→odom TF）
+  global_frame: map
+  # 机器人基坐标系
+  robot_base_frame: base_footprint
+
+  # 代价地图更新频率（Hz），全局地图不需要太频繁
+  update_frequency: 1.0
+  # 代价地图发布频率（Hz），用于 RViz 可视化
+  publish_frequency: 1.0
+
+  # 使用 SLAM Toolbox 发布的 /map 作为静态地图
+  static_map: true
+  # 不使用滚动窗口（全局地图覆盖整个已知环境）
+  rolling_window: false
+
+  # TF 变换超时容忍时间（s），防止短暂 TF 延迟导致代价地图更新失败
+  transform_tolerance: 1.0
+
+  # 插件层（按顺序叠加）
+  plugins:
+    # 静态层：从 /map 话题读取 SLAM Toolbox 的栅格地图
+    - {name: static_layer, type: costmap_2d::StaticLayer}
+    # 膨胀层：在障碍物周围生成代价梯度（黄色区域），防止机器人贴墙
+    - {name: inflation_layer, type: costmap_2d::InflationLayer}

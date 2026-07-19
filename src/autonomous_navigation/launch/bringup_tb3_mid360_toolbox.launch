@@ -53,7 +53,7 @@
   <!--     创建与 base_link 平行的虚拟坐标系，位于 laser_livox 相同位置        -->
   <node pkg="tf" type="static_transform_publisher"
         name="laser_livox_level_tf"
-        args="0.04 0 0.16 0 0 0 base_link laser_livox_level 100"/>
+        args="0.04 0 0.4 0 0 0 base_link laser_livox_level 100"/>
 
   <!-- ============= 6. 3D 点云 → 2D 激光扫描（供 SLAM 建图使用） ========= -->
   <node pkg="pointcloud_to_laserscan" type="pointcloud_to_laserscan_node"
@@ -63,9 +63,9 @@
 
     <param name="target_frame"        value="laser_livox_level"/>
     <param name="transform_tolerance" value="0.05"/>
-    <!-- 雷达距地 ~0.16m，地板 z≈-0.16，取 -0.20~0.05 捕获墙壁立面 -->
-    <param name="min_height"          value="-0.20"/>
-    <param name="max_height"          value="0.05"/>
+    <!-- 雷达距地 ~0.41m，地板 z≈-0.41，取 -0.35~0.10 捕获墙壁立面（地面上方6~51cm） -->
+    <param name="min_height"          value="-0.35"/>
+    <param name="max_height"          value="0.10"/>
     <param name="angle_min"           value="-3.14159"/>
     <param name="angle_max"           value="3.14100"/>
     <param name="angle_increment"     value="0.005812"/>
@@ -113,7 +113,7 @@
   </node>
 
   <!-- ============= 8. RViz 可视化 ============= -->
-  <arg name="rviz" default="true"/>
+  <arg name="rviz" default="false"/>
   <node pkg="rviz" type="rviz" name="rviz"
         args="-d $(find autonomous_navigation)/rviz/nav_mapping.rviz"
         if="$(arg rviz)"/>

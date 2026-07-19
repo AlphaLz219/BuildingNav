@@ -1,0 +1,25 @@
+# ============================================================
+# 全局规划器参数（global_planner/GlobalPlanner）
+# 算法：A* 搜索（或 Dijkstra），在已知地图上规划最优路径
+# ============================================================
+
+GlobalPlanner:
+  # 允许路径经过未知区域（建图未完成时需要开启）
+  allow_unknown: true
+  # false = 使用 A* 搜索（更快），true = 使用 Dijkstra（保证最优）
+  use_dijkstra: false
+  # 使用二次近似计算路径代价（更平滑的路径）
+  use_quadratic: true
+  # false = 使用梯度下降优化路径（更优），true = 仅使用栅格路径
+  use_grid_path: true
+  # false = 使用新版行为（推荐）
+  old_behavior: false
+
+  default_tolerance: 0.5  # 目标姿态容忍度
+  # 障碍物（致死）栅格的代价值（0~254），253 接近最大值
+  lethal_cost: 253
+  # 自由空间的基础代价值，规划器会尽量避开高代价区域
+  neutral_cost: 30
+  # 代价缩放因子，实际代价 = neutral_cost + cost_factor × cell_cost
+  # 降低此值让规划器不那么害怕膨胀区高代价，更容易规划穿过窄道
+  cost_factor: 0.55

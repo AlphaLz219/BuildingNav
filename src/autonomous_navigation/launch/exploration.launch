@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<launch>
+  <!-- ===== 自主前沿探索 ===== -->
+  <!-- 前置条件：先运行 bringup_tb3_mid360_toolbox.launch（Gazebo + SLAM Toolbox） -->
+
+  <!-- ============= 1. 启动导航栈（move_base） ============= -->
+  <!-- 关闭 navigation.launch 自带的 RViz，使用探索专用 RViz -->
+  <include file="$(find autonomous_navigation)/launch/navigation.launch">
+    <arg name="rviz" value="false"/>
+  </include>
+
+  <!-- ============= 2. 前沿探索节点 ============= -->
+  <node pkg="autonomous_navigation" type="frontier_exploration.py"
+        name="frontier_exploration" output="screen">
+    <rosparam file="$(find autonomous_navigation)/config/exploration_params.yaml"
+              command="load"/>
+  </node>
+
+  <!-- ============= 3. 探索专用 RViz ============= -->
+  <arg name="rviz" default="true"/>
+  <node pkg="rviz" type="rviz" name="rviz_exploration"
+        args="-d $(find autonomous_navigation)/rviz/exploration.rviz"
+        if="$(arg rviz)"/>
+</launch>

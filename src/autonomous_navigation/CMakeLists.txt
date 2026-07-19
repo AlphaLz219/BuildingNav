@@ -4,3 +4,22 @@ project(autonomous_navigation)
 find_package(catkin REQUIRED)
 
 catkin_package()
+
+## Scripts: install Python executables that import catkin message bindings
+catkin_install_python(PROGRAMS
+  scripts/pointcloud_converter.py
+  scripts/frontier_exploration.py
+  DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)
+
+install(DIRECTORY launch/
+  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/launch
+)
+
+install(DIRECTORY config/
+  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/config
+)
+
+install(DIRECTORY rviz/
+  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/rviz
+)

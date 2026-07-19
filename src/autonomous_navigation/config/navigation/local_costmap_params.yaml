@@ -1,0 +1,35 @@
+# ============================================================
+# 局部代价地图参数
+# 用途：局部避障，实时感知机器人周围的动态障碍物
+# ============================================================
+
+local_costmap:
+  # 局部参考坐标系（使用 odom 避免 map→odom TF 跳变对局部规划的影响）
+  global_frame: odom
+  # 机器人基坐标系
+  robot_base_frame: base_footprint
+
+  # 代价地图更新频率（Hz），局部地图需要更实时
+  update_frequency: 5.0
+  # 代价地图发布频率（Hz），用于 RViz 可视化
+  publish_frequency: 2.0
+
+  # 不使用静态地图（局部地图仅依赖实时传感器数据）
+  static_map: false
+  # 使用滚动窗口（以机器人为中心，随机器人移动）
+  rolling_window: true
+  # 滚动窗口尺寸（m），3×3m 覆盖 DWA 规划器的预测范围
+  width: 3.0
+  height: 3.0
+  # 栅格分辨率（m/cell）
+  resolution: 0.05
+
+  # TF 变换超时容忍时间（s）
+  transform_tolerance: 1.0
+
+  # 插件层（按顺序叠加）
+  plugins:
+    # 障碍层：从 /scan_2d 实时标记和清除障碍物
+    - {name: obstacle_layer, type: costmap_2d::ObstacleLayer}
+    # 膨胀层：在障碍物周围生成代价梯度，为局部规划器提供安全距离信息
+    - {name: inflation_layer, type: costmap_2d::InflationLayer}

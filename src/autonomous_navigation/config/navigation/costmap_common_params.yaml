@@ -1,0 +1,44 @@
+# ============================================================
+# 代价地图共享参数（global_costmap 与 local_costmap 共用）
+# 适配：SLAM Toolbox 2D 建图 + Livox Mid-360（0.4m 安装高度）
+# ============================================================
+
+# 机器人外接圆半径（TB3 Burger 底盘 ~0.105m），用于碰撞检测
+robot_radius: 0.105
+
+# 障碍物检测最大距离（m），超出此距离的点云/激光不标记为障碍
+obstacle_range: 5.0
+# 光线追踪清除距离（m），激光射线在此范围内将沿途栅格标记为自由
+raytrace_range: 6.0
+# 膨胀层半径（m），障碍物周围的安全缓冲区域
+inflation_radius: 0.12
+# 膨胀衰减系数，越大则膨胀代价衰减越快（黄色区域越窄）
+cost_scaling_factor: 10.0
+
+# ---- 观测源 ----
+# 使用的传感器数据源名称列表
+observation_sources: scan_2d
+
+scan_2d:
+  # 数据类型：LaserScan（2D 激光扫描，由 pointcloud_to_laserscan 生成）
+  data_type: LaserScan
+  # 话题名称
+  topic: /scan_2d
+  # 传感器模型：ray（射线模型，支持光线追踪清除）
+  sensor_model_type: ray
+  # 是否用此传感器清除障碍物（激光经过的自由空间标记为可通行）
+  clearing: true
+  # 是否用此传感器标记障碍物
+  marking: true
+  # 该传感器的光线追踪清除范围（m）
+  raytrace_range: 6.0
+  # 该传感器的障碍物标记范围（m）
+  obstacle_range: 5.0
+  # 障碍物高度上限（m），高于此值的点忽略（2D LaserScan 此参数意义较小）
+  max_obstacle_height: 0.3
+  # 障碍物高度下限（m），低于此值的点忽略
+  min_obstacle_height: -0.15
+  # 允许 inf（无穷远）读数作为有效数据（表示未检测到障碍物的射线）
+  inf_is_valid: true
+  # 观测数据保留时间（s），0 = 每次更新后立即丢弃旧观测，防止残留障碍物
+  observation_persistence: 0.0

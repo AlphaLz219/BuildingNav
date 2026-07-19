@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(source *)",
+      "Bash(catkin_make)",
+      "Bash(chmod *)",
+      "Bash(ls *)"
+    ]
+  },
+  "$version": 4
+}
