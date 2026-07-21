@@ -1,3 +1,4 @@
 {
-  "ROS2.distro": "noetic"
+  "ROS2.distro": "noetic",
+  "cmake.ignoreCMakeListsMissing": true
 }

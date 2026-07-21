@@ -1,0 +1,425 @@
+<?xml version="1.0" ?>
+<sdf version="1.7">
+  <model name="generated_lightweight_building">
+    <static>true</static>
+    <pose>0 0 0 0 0 0</pose>
+    <link name="lightweight_foundation">
+      <pose>0.0000 18.0000 -0.0900 0.0000 0.0000 0.0000</pose>
+      <gravity>false</gravity>
+      <collision name="lightweight_foundation_collision">
+        <geometry>
+          <box>
+            <size>21.0000 37.0000 0.1800</size>
+          </box>
+        </geometry>
+      </collision>
+      <visual name="lightweight_foundation_visual">
+        <geometry>
+          <box>
+            <size>21.0000 37.0000 0.1800</size>
+          </box>
+        </geometry>
+        <material>
+          <ambient>0.56 0.57 0.59 1</ambient>
+          <diffuse>0.56 0.57 0.59 1</diffuse>
+        </material>
+      </visual>
+    </link>
+    <link name="lightweight_entrance_apron">
+      <pose>0.0000 -0.8000 0.0300 0.0000 0.0000 0.0000</pose>
+      <gravity>false</gravity>
+      <collision name="lightweight_entrance_apron_collision">
+        <geometry>
+          <box>
+            <size>3.0000 1.6000 0.0100</size>
+          </box>
+        </geometry>
+      </collision>
+      <visual name="lightweight_entrance_apron_visual">
+        <geometry>
+          <box>
+            <size>3.0000 1.6000 0.0100</size>
+          </box>
+        </geometry>
+        <material>
+          <ambient>0.62 0.63 0.65 1</ambient>
+          <diffuse>0.62 0.63 0.65 1</diffuse>
+        </material>
+      </visual>
+    </link>
+    <link name="lightweight_floor_plate_0">
+      <pose>0.0000 18.0000 -0.0900 0.0000 0.0000 0.0000</pose>
+      <gravity>false</gravity>
+      <collision name="lightweight_floor_plate_0_collision">
+        <geometry>
+          <box>
+            <size>20.0000 36.0000 0.1800</size>
+          </box>
+        </geometry>
+      </collision>
+      <visual name="lightweight_floor_plate_0_visual">
+        <geometry>
+          <box>
+            <size>20.0000 36.0000 0.1800</size>
+          </box>
+        </geometry>
+        <material>
+          <ambient>0.75 0.76 0.77 1</ambient>
+          <diffuse>0.75 0.76 0.77 1</diffuse>
+        </material>
+      </visual>
+    </link>
+    <link name="lightweight_west_wall_0">
+      <pose>-10.0000 18.0000 1.1750 0.0000 0.0000 0.0000</pose>
+      <gravity>false</gravity>
+      <collision name="lightweight_west_wall_0_collision">
+        <geometry>
+          <box>
+            <size>0.1400 36.0000 2.3500</size>
+          </box>
+        </geometry>
+      </collision>
+      <visual name="lightweight_west_wall_0_visual">
+        <geometry>
+          <box>
+            <size>0.1400 36.0000 2.3500</size>
+          </box>
+        </geometry>
+        <material>
+          <ambient>0.84 0.85 0.87 1</ambient>
+          <diffuse>0.84 0.85 0.87 1</diffuse>
+        </material>
+      </visual>
+    </link>
+    <link name="lightweight_east_wall_0">
+      <pose>10.0000 18.0000 1.1750 0.0000 0.0000 0.0000</pose>
+      <gravity>false</gravity>
+      <collision name="lightweight_east_wall_0_collision">
+        <geometry>
+          <box>
+            <size>0.1400 36.0000 2.3500</size>
+          </box>
+        </geometry>
+      </collision>
+      <visual name="lightweight_east_wall_0_visual">
+        <geometry>
+          <box>
+            <size>0.1400 36.0000 2.3500</size>
+          </box>
+        </geometry>
+        <material>
+          <ambient>0.84 0.85 0.87 1</ambient>
+          <diffuse>0.84 0.85 0.87 1</diffuse>
+        </material>
+      </visual>
+    </link>
+    <link name="lightweight_north_wall_0">
+      <pose>0.0000 36.0000 1.1750 0.0000 0.0000 0.0000</pose>
+      <gravity>false</gravity>
+      <collision name="lightweight_north_wall_0_collision">
+        <geometry>
+          <box>
+            <size>20.0000 0.1400 2.3500</size>
+          </box>
+        </geometry>
+      </collision>
+      <visual name="lightweight_north_wall_0_visual">
+        <geometry>
+          <box>
+            <size>20.0000 0.1400 2.3500</size>
+          </box>
+        </geometry>
+        <material>
+          <ambient>0.84 0.85 0.87 1</ambient>
+          <diffuse>0.84 0.85 0.87 1</diffuse>
+        </material>
+      </visual>
+    </link>
+    <link name="lightweight_south_wall_left_0">
+      <pose>-5.4500 0.0000 1.1750 0.0000 0.0000 0.0000</pose>
+      <gravity>false</gravity>
+      <collision name="lightweight_south_wall_left_0_collision">
+        <geometry>
+          <box>
+            <size>9.1000 0.1400 2.3500</size>
+          </box>
+        </geometry>
+      </collision>
+      <visual name="lightweight_south_wall_left_0_visual">
+        <geometry>
+          <box>
+            <size>9.1000 0.1400 2.3500</size>
+          </box>
+        </geometry>
+        <material>
+          <ambient>0.84 0.85 0.87 1</ambient>
+          <diffuse>0.84 0.85 0.87 1</diffuse>
+        </material>
+      </visual>
+    </link>
+    <link name="lightweight_south_wall_right_0">
+      <pose>5.4500 0.0000 1.1750 0.0000 0.0000 0.0000</pose>
+      <gravity>false</gravity>
+      <collision name="lightweight_south_wall_right_0_collision">
+        <geometry>
+          <box>
+            <size>9.1000 0.1400 2.3500</size>
+          </box>
+        </geometry>
+      </collision>
+      <visual name="lightweight_south_wall_right_0_visual">
+        <geometry>
+          <box>
+            <size>9.1000 0.1400 2.3500</size>
+          </box>
+        </geometry>
+        <material>
+          <ambient>0.84 0.85 0.87 1</ambient>
+          <diffuse>0.84 0.85 0.87 1</diffuse>
+        </material>
+      </visual>
+    </link>
+    <link name="lightweight_light_floor_0_room_0_corridor_wall_lower">
+      <pose>-0.8000 11.8175 1.2250 0.0000 0.0000 0.0000</pose>
+      <gravity>false</gravity>
+      <collision name="lightweight_light_floor_0_room_0_corridor_wall_lower_collision">
+        <geometry>
+          <box>
+            <size>0.1400 15.2350 2.4500</size>
+          </box>
+        </geometry>
+      </collision>
+      <visual name="lightweight_light_floor_0_room_0_corridor_wall_lower_visual">
+        <geometry>
+          <box>
+            <size>0.1400 15.2350 2.4500</size>
+          </box>
+        </geometry>
+        <material>
+          <ambient>0.84 0.85 0.87 1</ambient>
+          <diffuse>0.84 0.85 0.87 1</diffuse>
+        </material>
+      </visual>
+    </link>
+    <link name="lightweight_light_floor_0_room_0_corridor_wall_upper">
+      <pose>-0.8000 28.1825 1.2250 0.0000 0.0000 0.0000</pose>
+      <gravity>false</gravity>
+      <collision name="lightweight_light_floor_0_room_0_corridor_wall_upper_collision">
+        <geometry>
+          <box>
+            <size>0.1400 15.2350 2.4500</size>
+          </box>
+        </geometry>
+      </collision>
+      <visual name="lightweight_light_floor_0_room_0_corridor_wall_upper_visual">
+        <geometry>
+          <box>
+            <size>0.1400 15.2350 2.4500</size>
+          </box>
+        </geometry>
+        <material>
+          <ambient>0.84 0.85 0.87 1</ambient>
+          <diffuse>0.84 0.85 0.87 1</diffuse>
+        </material>
+      </visual>
+    </link>
+    <link name="lightweight_light_floor_0_room_0_south_wall">
+      <pose>-5.2250 4.2000 1.2250 0.0000 0.0000 0.0000</pose>
+      <gravity>false</gravity>
+      <collision name="lightweight_light_floor_0_room_0_south_wall_collision">
+        <geometry>
+          <box>
+            <size>8.8500 0.1400 2.4500</size>
+          </box>
+        </geometry>
+      </collision>
+      <visual name="lightweight_light_floor_0_room_0_south_wall_visual">
+        <geometry>
+          <box>
+            <size>8.8500 0.1400 2.4500</size>
+          </box>
+        </geometry>
+        <material>
+          <ambient>0.84 0.85 0.87 1</ambient>
+          <diffuse>0.84 0.85 0.87 1</diffuse>
+        </material>
+      </visual>
+    </link>
+    <link name="lightweight_light_floor_0_room_0_north_wall">
+      <pose>-5.2250 35.8000 1.2250 0.0000 0.0000 0.0000</pose>
+      <gravity>false</gravity>
+      <collision name="lightweight_light_floor_0_room_0_north_wall_collision">
+        <geometry>
+          <box>
+            <size>8.8500 0.1400 2.4500</size>
+          </box>
+        </geometry>
+      </collision>
+      <visual name="lightweight_light_floor_0_room_0_north_wall_visual">
+        <geometry>
+          <box>
+            <size>8.8500 0.1400 2.4500</size>
+          </box>
+        </geometry>
+        <material>
+          <ambient>0.84 0.85 0.87 1</ambient>
+          <diffuse>0.84 0.85 0.87 1</diffuse>
+        </material>
+      </visual>
+    </link>
+    <link name="lightweight_light_floor_0_room_1_corridor_wall_lower">
+      <pose>0.8000 11.8175 1.2250 0.0000 0.0000 0.0000</pose>
+      <gravity>false</gravity>
+      <collision name="lightweight_light_floor_0_room_1_corridor_wall_lower_collision">
+        <geometry>
+          <box>
+            <size>0.1400 15.2350 2.4500</size>
+          </box>
+        </geometry>
+      </collision>
+      <visual name="lightweight_light_floor_0_room_1_corridor_wall_lower_visual">
+        <geometry>
+          <box>
+            <size>0.1400 15.2350 2.4500</size>
+          </box>
+        </geometry>
+        <material>
+          <ambient>0.84 0.85 0.87 1</ambient>
+          <diffuse>0.84 0.85 0.87 1</diffuse>
+        </material>
+      </visual>
+    </link>
+    <link name="lightweight_light_floor_0_room_1_corridor_wall_upper">
+      <pose>0.8000 28.1825 1.2250 0.0000 0.0000 0.0000</pose>
+      <gravity>false</gravity>
+      <collision name="lightweight_light_floor_0_room_1_corridor_wall_upper_collision">
+        <geometry>
+          <box>
+            <size>0.1400 15.2350 2.4500</size>
+          </box>
+        </geometry>
+      </collision>
+      <visual name="lightweight_light_floor_0_room_1_corridor_wall_upper_visual">
+        <geometry>
+          <box>
+            <size>0.1400 15.2350 2.4500</size>
+          </box>
+        </geometry>
+        <material>
+          <ambient>0.84 0.85 0.87 1</ambient>
+          <diffuse>0.84 0.85 0.87 1</diffuse>
+        </material>
+      </visual>
+    </link>
+    <link name="lightweight_light_floor_0_room_1_south_wall">
+      <pose>5.2250 4.2000 1.2250 0.0000 0.0000 0.0000</pose>
+      <gravity>false</gravity>
+      <collision name="lightweight_light_floor_0_room_1_south_wall_collision">
+        <geometry>
+          <box>
+            <size>8.8500 0.1400 2.4500</size>
+          </box>
+        </geometry>
+      </collision>
+      <visual name="lightweight_light_floor_0_room_1_south_wall_visual">
+        <geometry>
+          <box>
+            <size>8.8500 0.1400 2.4500</size>
+          </box>
+        </geometry>
+        <material>
+          <ambient>0.84 0.85 0.87 1</ambient>
+          <diffuse>0.84 0.85 0.87 1</diffuse>
+        </material>
+      </visual>
+    </link>
+    <link name="lightweight_light_floor_0_room_1_north_wall">
+      <pose>5.2250 35.8000 1.2250 0.0000 0.0000 0.0000</pose>
+      <gravity>false</gravity>
+      <collision name="lightweight_light_floor_0_room_1_north_wall_collision">
+        <geometry>
+          <box>
+            <size>8.8500 0.1400 2.4500</size>
+          </box>
+        </geometry>
+      </collision>
+      <visual name="lightweight_light_floor_0_room_1_north_wall_visual">
+        <geometry>
+          <box>
+            <size>8.8500 0.1400 2.4500</size>
+          </box>
+        </geometry>
+        <material>
+          <ambient>0.84 0.85 0.87 1</ambient>
+          <diffuse>0.84 0.85 0.87 1</diffuse>
+        </material>
+      </visual>
+    </link>
+    <link name="lightweight_stair_core_west_0">
+      <pose>-2.9500 1.9000 1.2250 0.0000 0.0000 0.0000</pose>
+      <gravity>false</gravity>
+      <collision name="lightweight_stair_core_west_0_collision">
+        <geometry>
+          <box>
+            <size>0.1400 2.4000 2.4500</size>
+          </box>
+        </geometry>
+      </collision>
+      <visual name="lightweight_stair_core_west_0_visual">
+        <geometry>
+          <box>
+            <size>0.1400 2.4000 2.4500</size>
+          </box>
+        </geometry>
+        <material>
+          <ambient>0.84 0.85 0.87 1</ambient>
+          <diffuse>0.84 0.85 0.87 1</diffuse>
+        </material>
+      </visual>
+    </link>
+    <link name="lightweight_stair_core_south_0">
+      <pose>-2.0500 0.7000 1.2250 0.0000 0.0000 0.0000</pose>
+      <gravity>false</gravity>
+      <collision name="lightweight_stair_core_south_0_collision">
+        <geometry>
+          <box>
+            <size>1.8000 0.1400 2.4500</size>
+          </box>
+        </geometry>
+      </collision>
+      <visual name="lightweight_stair_core_south_0_visual">
+        <geometry>
+          <box>
+            <size>1.8000 0.1400 2.4500</size>
+          </box>
+        </geometry>
+        <material>
+          <ambient>0.84 0.85 0.87 1</ambient>
+          <diffuse>0.84 0.85 0.87 1</diffuse>
+        </material>
+      </visual>
+    </link>
+    <link name="lightweight_stair_core_north_0">
+      <pose>-2.0500 3.1000 1.2250 0.0000 0.0000 0.0000</pose>
+      <gravity>false</gravity>
+      <collision name="lightweight_stair_core_north_0_collision">
+        <geometry>
+          <box>
+            <size>1.8000 0.1400 2.4500</size>
+          </box>
+        </geometry>
+      </collision>
+      <visual name="lightweight_stair_core_north_0_visual">
+        <geometry>
+          <box>
+            <size>1.8000 0.1400 2.4500</size>
+          </box>
+        </geometry>
+        <material>
+          <ambient>0.84 0.85 0.87 1</ambient>
+          <diffuse>0.84 0.85 0.87 1</diffuse>
+        </material>
+      </visual>
+    </link>
+  </model>
+</sdf>

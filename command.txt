@@ -3,3 +3,4 @@
 // rosrun turtlebot3_teleop turtlebot3_teleop_key _speed:=0.15 _turn:=1.0
 // roslaunch autonomous_navigation bringup_tb3_mid360_toolbox.launch
 // roslaunch autonomous_navigation navigation.launch
+// roslaunch autonomous_navigation exploration.launch

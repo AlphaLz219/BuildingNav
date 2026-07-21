@@ -7,9 +7,9 @@
 DWAPlannerROS:
   # ---- 速度限制 ----
   # 最大前进速度（m/s），TB3 Burger 最大 0.22 m/s
-  max_vel_x: 0.22
+  max_vel_x: 1.0
   # 禁止倒车（设为 0），防止 DWA 在弯道或墙边选择倒车轨迹
-  min_vel_x: -0.2
+  min_vel_x: -1.0
   # 横向速度（差速驱动无横向运动能力）
   max_vel_y: 0.0
   min_vel_y: 0.0
@@ -22,11 +22,11 @@ DWAPlannerROS:
 
   # ---- 加速度限制 ----
   # 线加速度限制（m/s²）
-  acc_lim_x: 0.4
+  acc_lim_x: 0.8
   # 差速驱动无横向加速度
   acc_lim_y: 0.0
   # 角加速度限制（rad/s²）
-  acc_lim_theta: 2.5
+  acc_lim_theta: 4.0
 
   # ---- 机器人类型 ----
   # false = 差速驱动（非全向移动）
