@@ -14,7 +14,7 @@ DWAPlannerROS:
   max_vel_y: 0.0
   min_vel_y: 0.0
   # 平移速度范围（m/s）
-  max_vel_trans: 0.22
+  max_vel_trans: 0.4
   min_vel_trans: 0.01
   # 旋转速度范围（rad/s），TB3 Burger 最大约 2.75 rad/s
   max_vel_theta: 1.5
@@ -50,7 +50,7 @@ DWAPlannerROS:
   # 目标趋近权重，更积极地朝目标移动（穿窄道时更有效）
   goal_distance_bias: 32.0
   # 障碍物距离权重，适度远离障碍物
-  occdist_scale: 0.05
+  occdist_scale: 0.5
   # 旋转抑制权重，惩罚无意义的原地旋转
   twirling_scale: 0.5
   # 停车判定阈值（m），距目标小于此值时开始减速停车

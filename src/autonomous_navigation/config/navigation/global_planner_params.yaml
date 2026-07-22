@@ -7,7 +7,7 @@ GlobalPlanner:
   # 允许路径经过未知区域（建图未完成时需要开启）
   allow_unknown: true
   # false = 使用 A* 搜索（更快），true = 使用 Dijkstra（保证最优）
-  use_dijkstra: false
+  use_dijkstra: true
   # 使用二次近似计算路径代价（更平滑的路径）
   use_quadratic: true
   # false = 使用梯度下降优化路径（更优），true = 仅使用栅格路径

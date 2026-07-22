@@ -1,17 +1,17 @@
 Panels:
   - Class: rviz/Displays
-    Help Height: 138
+    Help Height: 0
     Name: Displays
     Property Tree Widget:
       Expanded:
-        - /Local Costmap1
+        - /Local Plan1
         - /Odometry1
         - /Odometry1/Shape1
         - /Odometry1/Covariance1
         - /Odometry1/Covariance1/Position1
         - /Odometry1/Covariance1/Orientation1
       Splitter Ratio: 0.5
-    Tree Height: 1140
+    Tree Height: 499
   - Class: rviz/Selection
     Name: Selection
   - Class: rviz/Tool Properties
@@ -170,7 +170,7 @@ Visualization Manager:
     - Alpha: 1
       Buffer Length: 1
       Class: rviz/Path
-      Color: 255; 255; 0
+      Color: 255; 170; 0
       Enabled: true
       Head Diameter: 0.30000001192092896
       Head Length: 0.20000000298023224
@@ -237,7 +237,7 @@ Visualization Manager:
           Value: true
         Value: false
       Enabled: true
-      Keep: 3
+      Keep: 1
       Name: Odometry
       Position Tolerance: 0.10000000149011612
       Queue Size: 10
@@ -335,7 +335,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 6.217840671539307
+      Distance: 8.881994247436523
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -343,25 +343,25 @@ Visualization Manager:
         Value: false
       Field of View: 0.7853981852531433
       Focal Point:
-        X: 0.2628680467605591
-        Y: 5.385237216949463
-        Z: -0.13956056535243988
+        X: -0.17130805552005768
+        Y: 5.951786041259766
+        Z: -0.46013593673706055
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 1.4447964429855347
+      Pitch: 1.5697963237762451
       Target Frame: <Fixed Frame>
-      Yaw: 6.243188381195068
+      Yaw: 6.273190021514893
     Saved: ~
 Window Geometry:
   Displays:
     collapsed: false
-  Height: 1650
+  Height: 744
   Hide Left Dock: false
   Hide Right Dock: false
-  QMainWindow State: 000000ff00000000fd00000002000000000000036f0000056cfc0200000004fb000000100044006900730070006c006100790073010000006e0000056c0000018200fffffffb0000001200530065006c0065006300740069006f006e000000026d000000e4000000b000fffffffb0000001e0054006f006f006c002000500072006f007000650072007400690065007300000002d800000115000000b000fffffffb0000000a005600690065007700730000000379000002610000013200ffffff0000000300000b400000005efc0100000001fb0000000800540069006d0065010000000000000b40000006dc00ffffff000007c50000056c00000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
+  QMainWindow State: 000000ff00000000fd0000000200000000000001620000022efc0200000004fb000000100044006900730070006c006100790073010000003b0000022e000000c700fffffffb0000001200530065006c0065006300740069006f006e000000026d000000e40000005c00fffffffb0000001e0054006f006f006c002000500072006f007000650072007400690065007300000002d8000001150000005c00fffffffb0000000a00560069006500770073000000037900000261000000a000ffffff00000003000005630000005efc0100000001fb0000000800540069006d00650100000000000005630000030700ffffff000003fb0000022e00000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
   Selection:
     collapsed: false
   Time:
@@ -370,6 +370,6 @@ Window Geometry:
     collapsed: false
   Views:
     collapsed: false
-  Width: 2880
-  X: 0
-  Y: 0
+  Width: 1379
+  X: 175
+  Y: 26

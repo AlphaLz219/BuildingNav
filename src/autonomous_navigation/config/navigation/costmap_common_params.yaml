@@ -11,9 +11,9 @@ obstacle_range: 5.0
 # 光线追踪清除距离（m），激光射线在此范围内将沿途栅格标记为自由
 raytrace_range: 6.0
 # 膨胀层半径（m），障碍物周围的安全缓冲区域
-inflation_radius: 0.12
+inflation_radius: 0.15
 # 膨胀衰减系数，越大则膨胀代价衰减越快（黄色区域越窄）
-cost_scaling_factor: 10.0
+cost_scaling_factor: 3.0
 
 # ---- 观测源 ----
 # 使用的传感器数据源名称列表
