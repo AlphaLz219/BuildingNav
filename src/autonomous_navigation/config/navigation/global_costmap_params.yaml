@@ -10,9 +10,9 @@ global_costmap:
   robot_base_frame: base_footprint
 
   # 代价地图更新频率（Hz），全局地图不需要太频繁
-  update_frequency: 1.0
+  update_frequency: 5.0
   # 代价地图发布频率（Hz），用于 RViz 可视化
-  publish_frequency: 1.0
+  publish_frequency: 2.0
 
   # 使用 SLAM Toolbox 发布的 /map 作为静态地图
   static_map: true

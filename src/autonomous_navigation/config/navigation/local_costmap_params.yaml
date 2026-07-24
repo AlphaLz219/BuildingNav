@@ -18,9 +18,9 @@ local_costmap:
   static_map: false
   # 使用滚动窗口（以机器人为中心，随机器人移动）
   rolling_window: true
-  # 滚动窗口尺寸（m），3×3m 覆盖 DWA 规划器的预测范围
-  width: 3.0
-  height: 3.0
+  # 滚动窗口尺寸（m），6×6m 覆盖 DWA 规划器的预测范围
+  width: 6.0
+  height: 6.0
   # 栅格分辨率（m/cell）
   resolution: 0.05
 

@@ -11,7 +11,7 @@ GlobalPlanner:
   # 使用二次近似计算路径代价（更平滑的路径）
   use_quadratic: true
   # false = 使用梯度下降优化路径（更优），true = 仅使用栅格路径
-  use_grid_path: true
+  use_grid_path: false          # GridPath → GradientPath
   # false = 使用新版行为（推荐）
   old_behavior: false
 
@@ -22,4 +22,4 @@ GlobalPlanner:
   neutral_cost: 30
   # 代价缩放因子，实际代价 = neutral_cost + cost_factor × cell_cost
   # 降低此值让规划器不那么害怕膨胀区高代价，更容易规划穿过窄道
-  cost_factor: 0.55
+  cost_factor: 3

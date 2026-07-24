@@ -22,10 +22,11 @@ import actionlib
 import tf
 
 from nav_msgs.msg import OccupancyGrid
+from nav_msgs.srv import GetPlan, GetPlanRequest
 from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal
 from actionlib_msgs.msg import GoalStatus
 from visualization_msgs.msg import Marker, MarkerArray
-from geometry_msgs.msg import Point
+from geometry_msgs.msg import Point, PoseStamped
 from std_msgs.msg import ColorRGBA
 
 
@@ -52,6 +53,8 @@ class FrontierExplorer:
         self.weight_size = rospy.get_param('~score_size_weight', 0.6)
         # 评分权重 —— 距离（越近越好）
         self.weight_dist = rospy.get_param('~score_distance_weight', 0.4)
+        # 评分权重 —— 目标点净空（距障碍物多远），0=不纳入评分
+        self.weight_clearance = rospy.get_param('~score_clearance_weight', 0.3)
         # 连续无前沿次数阈值，超过则判定探索完成
         self.max_no_frontier = rospy.get_param('~max_no_frontier_count', 5)
         # 导航超时（秒），超过则取消当前目标
@@ -60,6 +63,19 @@ class FrontierExplorer:
         self.blacklist_radius = rospy.get_param('~blacklist_radius', 1.5)
         # 距机器人太近的前沿不选（已在附近，无需导航）
         self.min_goal_distance = rospy.get_param('~min_goal_distance', 0.8)
+        # 目标点距最近障碍物的最小净空（米），低于此值的簇直接跳过
+        self.min_goal_clearance = rospy.get_param('~min_goal_clearance', 0.3)
+        # 梯度推进最大步数（从簇内最深点沿距离梯度向内走），0=关闭推进
+        self.max_push_steps = rospy.get_param('~max_push_steps', 20)
+        # make_plan 预检查超时（秒），超时则假定不可达
+        self.plan_check_timeout = rospy.get_param('~plan_check_timeout', 2.0)
+        # 建图期周期性重规划间隔（秒），强制 move_base 基于最新地图刷新全局路径
+        # 设为 0 或负数则关闭此功能
+        self.replan_interval = rospy.get_param('~replan_interval', 6.0)
+        # 距目标小于此距离时停止重规划，避免接近目标时反复取消导致振荡
+        self.replan_min_dist = rospy.get_param('~replan_min_distance', 1.5)
+        # 重规划前要求 /map 至少更新过一次（避免 SLAM 未就绪时反复重发）
+        self._last_map_stamp = None
 
     def _init_state(self):
         """初始化内部状态变量"""
@@ -71,12 +87,19 @@ class FrontierExplorer:
         self.map_origin_x = 0.0
         self.map_origin_y = 0.0
 
+        # 距离变换缓存（detect_frontiers 计算，select_best_goal 使用）
+        self._dist_transform = None
+
         # 探索状态
         self.is_navigating = False     # 是否正在导航中
         self.no_frontier_count = 0     # 连续无前沿计数
         self.exploration_complete = False
         self.blacklist = []            # 导航失败的目标列表 [(x, y), ...]
         self.goal_start_time = None    # 当前导航开始时间（用于超时检测）
+
+        # 周期性重规划状态
+        self.current_goal_xy = None    # (x, y) 当前正在导航的目标坐标
+        self.last_replan_time = None   # 上次重规划触发时刻
 
     def _init_ros_interface(self):
         """初始化 ROS 接口：TF、ActionClient、发布器、订阅器"""
@@ -88,6 +111,13 @@ class FrontierExplorer:
         rospy.loginfo("[前沿探索] 等待 move_base 服务启动...")
         self.ac.wait_for_server()
         rospy.loginfo("[前沿探索] move_base 已连接")
+
+        # make_plan 服务 —— 发送目标前预检查可达性
+        rospy.loginfo("[前沿探索] 等待 /move_base/make_plan 服务...")
+        rospy.wait_for_service('/move_base/make_plan', timeout=10.0)
+        self._plan_service = rospy.ServiceProxy(
+            '/move_base/make_plan', GetPlan)
+        rospy.loginfo("[前沿探索] /move_base/make_plan 已连接")
 
         # 发布器 —— 前沿标记可视化（MarkerArray）
         self.marker_pub = rospy.Publisher(
@@ -103,12 +133,13 @@ class FrontierExplorer:
     def _map_callback(self, msg):
         """
         接收 SLAM Toolbox 发布的栅格地图
-        
+
         OccupancyGrid.data 值含义：
             0   = 自由空间（已探索，可通行）
             100 = 障碍物（墙壁等）
             -1  = 未知空间（未探索）
         """
+        self._last_map_stamp = msg.header.stamp
         self.map_width = msg.info.width
         self.map_height = msg.info.height
         self.map_resolution = msg.info.resolution
@@ -127,6 +158,52 @@ class FrontierExplorer:
         y = self.map_origin_y + (row + 0.5) * self.map_resolution
         return x, y
 
+    def _push_inward(self, start_row, start_col):
+        """
+        沿距离变换梯度向内推进，从边界走向通道/房间的几何中心。
+
+        每一步检查 8 邻域，移动到距离变换值最大的邻居。
+        当周围没有更大的值（到达局部最大）或达到最大步数时停止。
+        如果推进过程中踩到非自由空间则提前终止。
+
+        返回：(final_row, final_col)
+        """
+        if self._dist_transform is None or self.max_push_steps <= 0:
+            return start_row, start_col
+
+        r, c = start_row, start_col
+        h, w = self._dist_transform.shape
+
+        for _ in range(self.max_push_steps):
+            current_val = self._dist_transform[r, c]
+
+            # 检查 8 邻域，找最大值
+            best_val = current_val
+            best_r, best_c = r, c
+
+            for dr in (-1, 0, 1):
+                for dc in (-1, 0, 1):
+                    if dr == 0 and dc == 0:
+                        continue
+                    nr, nc = r + dr, c + dc
+                    if 0 <= nr < h and 0 <= nc < w:
+                        nv = self._dist_transform[nr, nc]
+                        if nv > best_val:
+                            best_val = nv
+                            best_r, best_c = nr, nc
+
+            # 没有更大的邻居 → 到达局部最大值，停止
+            if best_val <= current_val:
+                break
+
+            # 安全检查：目标必须是自由空间
+            if self.map_data[best_r, best_c] != 0:
+                break
+
+            r, c = best_r, best_c
+
+        return r, c
+
     def _get_robot_pose(self):
         """
         通过 TF 查询机器人当前位置（map 坐标系下的世界坐标）
@@ -144,18 +221,18 @@ class FrontierExplorer:
     # ────────────── 前沿检测 ──────────────
     def detect_frontiers(self):
         """
-        检测前沿点并聚类
-        
-        前沿定义：自由空间栅格，且至少有一个 4-邻域栅格是未知空间
-        即：机器人可以导航到该点，且该点旁边就是未探索区域
-        
+        检测前沿点并聚类，用距离变换找到每个簇的"最深处"作为导航目标。
+
+        前沿定义：自由空间栅格，且至少有一个 4-邻域栅格是未知空间。
+
         算法步骤：
-          1. 创建自由空间掩码（free_mask）和未知空间掩码（unknown_mask）
-          2. 对 unknown_mask 做 1 像素膨胀（dilate）
-          3. 前沿 = 膨胀后的未知区域 ∩ 自由区域
-          4. 用 cv2.connectedComponents 对前沿点聚类
-          5. 过滤太小的簇（噪声），计算每个簇的质心
-        
+          1. 创建 free_mask 和 unknown_mask
+          2. 计算自由空间的距离变换（每个像素 = 距最近障碍物/未知的像素数）
+          3. 膨胀未知空间，前沿 = 膨胀(未知) ∩ 自由
+          4. 连通域聚类
+          5. 过滤小簇；从每个簇中选距离变换值最大的点（最深处）作为目标
+          6. 过滤净空不足的簇
+
         返回：[(world_x, world_y, cluster_size), ...]
         """
         if self.map_data is None:
@@ -165,45 +242,66 @@ class FrontierExplorer:
         free_mask = (self.map_data == 0).astype(np.uint8)       # 自由空间
         unknown_mask = (self.map_data == -1).astype(np.uint8)   # 未知空间
 
+        # ── 距离变换：每个自由栅格的值 = 到最近墙壁的欧氏距离（像素）──
+        # 注意：只把障碍物(100)当作"墙"，未知(-1)视为可达空间
+        # 这样前沿目标会被推到远离墙壁的通道中央，而非远离未知边界
+        obstacle_mask = (self.map_data == 100).astype(np.uint8)
+        self._dist_transform = cv2.distanceTransform(
+            1 - obstacle_mask, cv2.DIST_L2, cv2.DIST_MASK_PRECISE
+        )
+        # 自由空间中值 ≥1，障碍物上值为 0
+
         # 膨胀未知空间 1 像素（3×3 核）
-        # 膨胀后，原来未知区域的边界会向外扩展 1 像素到自由区域
         kernel = np.ones((3, 3), np.uint8)
         dilated_unknown = cv2.dilate(unknown_mask, kernel, iterations=1)
 
-        # 前沿 = 膨胀后的未知区域 与 自由区域 的交集
-        # 结果：自由空间中紧邻未知空间的栅格
+        # 前沿 = 膨胀后的未知区域 ∩ 自由区域
         frontier_mask = (dilated_unknown & free_mask).astype(np.uint8)
 
-        # 连通域分析 —— 将相邻前沿点聚成簇
+        # 连通域分析
         num_labels, labels = cv2.connectedComponents(frontier_mask)
+
+        # 最小净空（栅格数），低于此值的簇视为"贴墙"直接跳过
+        min_clearance_cells = self.min_goal_clearance / self.map_resolution
 
         frontiers = []
         for label_id in range(1, num_labels):  # label 0 是背景
-            # 提取当前簇的所有像素坐标
             rows, cols = np.where(labels == label_id)
             size = len(rows)
 
-            # 过滤太小的簇（可能是噪声或无意义的碎片）
+            # 过滤太小的簇
             if size < self.min_frontier_size:
                 continue
 
-            # 计算质心（栅格坐标的平均值）
-            center_col = int(np.mean(cols))
-            center_row = int(np.mean(rows))
+            # ── 在簇内找距离变换值最大的像素（即离所有障碍物最远的地方）──
+            cluster_dists = self._dist_transform[rows, cols]
+            best_idx = np.argmax(cluster_dists)
+            center_row = rows[best_idx]
+            center_col = cols[best_idx]
+            max_clearance = cluster_dists[best_idx] * self.map_resolution  # 米
 
-            # 验证质心是否在自由空间内（防止质心落在墙上）
-            if self.map_data[center_row, center_col] != 0:
-                # 质心不在自由空间，找簇内距质心最近的自由空间点
-                best_dist = float('inf')
-                for r, c in zip(rows, cols):
-                    if self.map_data[r, c] == 0:
-                        d = (c - center_col)**2 + (r - center_row)**2
-                        if d < best_dist:
-                            best_dist = d
-                            center_col, center_row = c, r
+            # ── 安全检查：净空不足则跳过 ──
+            if max_clearance < self.min_goal_clearance:
+                rospy.loginfo(
+                    "[前沿探索] 跳过贴墙前沿簇 (size=%d)，最大净空仅 %.2fm",
+                    size, max_clearance)
+                continue
+
+            # ── 梯度推进：沿距离梯度向内走，逼近通道/房间中心 ──
+            pushed_r, pushed_c = self._push_inward(center_row, center_col)
+            pushed_clearance = (
+                self._dist_transform[pushed_r, pushed_c] * self.map_resolution)
+            rospy.loginfo(
+                "[前沿探索] 梯度推进: (%.2f,%.2f)[%.2fm] → (%.2f,%.2f)[%.2fm]",
+                self._grid_to_world(center_col, center_row)[0],
+                self._grid_to_world(center_col, center_row)[1],
+                max_clearance,
+                self._grid_to_world(pushed_c, pushed_r)[0],
+                self._grid_to_world(pushed_c, pushed_r)[1],
+                pushed_clearance)
 
             # 转换为世界坐标
-            wx, wy = self._grid_to_world(center_col, center_row)
+            wx, wy = self._grid_to_world(pushed_c, pushed_r)
             frontiers.append((wx, wy, size))
 
         return frontiers
@@ -211,16 +309,17 @@ class FrontierExplorer:
     # ────────────── 目标选择 ──────────────
     def select_best_goal(self, frontiers):
         """
-        从前沿簇中选择评分最高的导航目标
-        
-        评分函数：
-            score = weight_size × (size / max_size)    信息增益分量
-                  + weight_dist × (1 / (dist + 0.1))   距离分量
-        
+        从前沿簇中选择评分最高的导航目标。
+
+        评分函数（三因素加权）：
+            score = w_size × (size/max_size)       信息增益分量
+                  + w_dist × 1/(dist+0.1)          距离分量
+                  + w_clear × clearance_score      安全净空分量
+
         过滤条件：
-            - 黑名单中的前沿（之前导航失败的位置）
-            - 距离机器人太近的前沿（已在附近）
-        
+            - 黑名单中的前沿
+            - 距离机器人太近的前沿
+
         返回：(goal_x, goal_y, score) 或 None
         """
         if not frontiers:
@@ -230,37 +329,68 @@ class FrontierExplorer:
         if robot_x is None:
             return None
 
+        # 按权重分配比例，确保三个分量和为 1.0
+        # 净空权重从已有的 size+dist 中匀出一部分
+        w_clear = self.weight_clearance
+        w_size = self.weight_size * (1.0 - w_clear)
+        w_dist = self.weight_dist * (1.0 - w_clear)
+
         # 最大前沿簇大小（用于归一化）
         max_size = max(f[2] for f in frontiers)
 
         candidates = []
         for (fx, fy, fsize) in frontiers:
-            # 跳过黑名单中的前沿（之前导航失败过的位置）
+            # 跳过黑名单
             if self._is_blacklisted(fx, fy):
                 continue
 
             # 计算到机器人的距离
             dist = np.sqrt((fx - robot_x)**2 + (fy - robot_y)**2)
-
-            # 跳过太近的前沿（机器人已经在附近了）
             if dist < self.min_goal_distance:
                 continue
 
-            # 归一化评分
-            size_score = fsize / max_size           # 0~1，越大信息增益越高
-            dist_score = 1.0 / (dist + 0.1)         # 越近越高，+0.1 防除零
+            # ── 查询该目标点的净空（通过距离变换缓存）──
+            clearance = 0.0
+            if self._dist_transform is not None:
+                col = int((fx - self.map_origin_x) / self.map_resolution)
+                row = int((fy - self.map_origin_y) / self.map_resolution)
+                if 0 <= row < self.map_height and 0 <= col < self.map_width:
+                    clearance = (
+                        self._dist_transform[row, col] * self.map_resolution)
+            # 归一化：假设最大合理净空约 2m
+            clearance_score = min(clearance / 2.0, 1.0)
 
-            score = (self.weight_size * size_score +
-                     self.weight_dist * dist_score)
+            # 三项归一化评分
+            size_score = fsize / max_size           # 0~1
+            dist_score = 1.0 / (dist + 0.1)         # 越近越高
+            score = (w_size * size_score +
+                     w_dist * dist_score +
+                     w_clear * clearance_score)
             candidates.append((fx, fy, fsize, score))
 
         if not candidates:
             return None
 
-        # 按评分降序，选最优
+        # 按评分降序排列
         candidates.sort(key=lambda c: c[3], reverse=True)
-        best = candidates[0]
-        return best[0], best[1], best[3]
+
+        # 按评分从高到低遍历，选第一个通过 make_plan 预检的目标
+        for (fx, fy, fsize, score) in candidates:
+            if not self._is_goal_reachable(fx, fy):
+                rospy.loginfo(
+                    "[前沿探索] make_plan 预检失败，跳过 (%.2f,%.2f) 评分=%.3f",
+                    fx, fy, score)
+                # 不可达的目标也加入黑名单，避免后续重复检查
+                self.blacklist.append((fx, fy))
+                continue
+
+            rospy.loginfo(
+                "[前沿探索] make_plan 预检通过 (%.2f,%.2f) 评分=%.3f",
+                fx, fy, score)
+            return fx, fy, score
+
+        # 所有候选都未通过预检
+        return None
 
     def _is_blacklisted(self, x, y):
         """检查 (x, y) 是否在黑名单中（之前导航失败的目标附近）"""
@@ -268,6 +398,66 @@ class FrontierExplorer:
             if (x - bx)**2 + (y - by)**2 < self.blacklist_radius**2:
                 return True
         return False
+
+    def _is_goal_reachable(self, x, y):
+        """
+        通过 /move_base/make_plan 服务预检查目标是否可达。
+
+        校验条件：
+          1. 路径至少 5 个位姿（排除仅有起点的退化情况）
+          2. 路径终点与目标距离 < 1.0m（确认真到达目标附近，而非半路中断）
+
+        返回：True（可达） 或 False
+        """
+        robot_x, robot_y = self._get_robot_pose()
+        if robot_x is None:
+            return False
+
+        req = GetPlanRequest()
+        req.start.header.frame_id = 'map'
+        req.start.header.stamp = rospy.Time.now()
+        req.start.pose.position.x = robot_x
+        req.start.pose.position.y = robot_y
+        req.start.pose.position.z = 0.0
+        req.start.pose.orientation.w = 1.0
+
+        req.goal.header.frame_id = 'map'
+        req.goal.header.stamp = rospy.Time.now()
+        req.goal.pose.position.x = x
+        req.goal.pose.position.y = y
+        req.goal.pose.position.z = 0.0
+        req.goal.pose.orientation.w = 1.0
+
+        req.tolerance = 0.5
+
+        try:
+            resp = self._plan_service.call(req)
+            if resp.plan is None or len(resp.plan.poses) == 0:
+                rospy.loginfo(
+                    "[前沿探索] make_plan 返回空路径 (%.2f,%.2f)", x, y)
+                return False
+
+            # 校验 1：路径至少 5 个点，排除退化情况
+            if len(resp.plan.poses) < 5:
+                rospy.loginfo(
+                    "[前沿探索] make_plan 路径太短 (%d 点)，跳过 (%.2f,%.2f)",
+                    len(resp.plan.poses), x, y)
+                return False
+
+            # 校验 2：路径终点必须在目标附近（< 1.0m），否则是半路中断
+            last_pose = resp.plan.poses[-1].pose.position
+            end_dist = np.sqrt((last_pose.x - x)**2 + (last_pose.y - y)**2)
+            if end_dist > 1.0:
+                rospy.loginfo(
+                    "[前沿探索] make_plan 路径未达目标 (距目标 %.2fm)，"
+                    "跳过 (%.2f,%.2f)",
+                    end_dist, x, y)
+                return False
+
+            return True
+        except rospy.ServiceException as e:
+            rospy.logwarn("[前沿探索] make_plan 服务调用异常: %s", e)
+            return False
 
     # ────────────── 导航控制 ──────────────
     def send_goal(self, x, y):
@@ -293,13 +483,68 @@ class FrontierExplorer:
         self.ac.send_goal(goal)
         self.is_navigating = True
         self.goal_start_time = rospy.Time.now()
+        self.current_goal_xy = (x, y)
+        self.last_replan_time = rospy.Time.now()
 
     def cancel_goal(self):
         """取消当前导航目标"""
         self.ac.cancel_goal()
         self.is_navigating = False
         self.goal_start_time = None
+        self.current_goal_xy = None
+        self.last_replan_time = None
         rospy.loginfo("[前沿探索] 已取消当前导航目标")
+
+    # ────────────── 周期性重规划（建图期）──────────────
+    def _maybe_replan(self):
+        """
+        在导航过程中周期性取消并重发同一目标，强制 move_base
+        基于最新 global_costmap 重新调用全局规划器。
+
+        解决：建图探索期 SLAM 地图持续扩展，但 move_base 仅在路径失效
+        时才重规划，导致机器人死守旧路径、无视新发现捷径的问题。
+
+        触发条件：
+          1. replan_interval > 0（功能开启）
+          2. 距上次重规划已超过 replan_interval 秒
+          3. 机器人距目标仍大于 replan_min_dist（避免接近目标时振荡）
+          4. /map 话题有数据（SLAM 正在工作）
+        """
+        if self.replan_interval <= 0.0:
+            return
+        if self.current_goal_xy is None or self.last_replan_time is None:
+            return
+        if self._last_map_stamp is None:
+            return
+
+        now = rospy.Time.now()
+        elapsed = (now - self.last_replan_time).to_sec()
+        if elapsed < self.replan_interval:
+            return
+
+        gx, gy = self.current_goal_xy
+        robot_x, robot_y = self._get_robot_pose()
+        if robot_x is None:
+            return
+
+        dist = np.sqrt((gx - robot_x) ** 2 + (gy - robot_y) ** 2)
+        if dist < self.replan_min_dist:
+            return
+
+        rospy.loginfo(
+            "[前沿探索] ♻ 触发周期性重规划: 距目标 %.2fm, 已导航 %.1fs",
+            dist, (now - self.goal_start_time).to_sec()
+            if self.goal_start_time else 0.0)
+
+        # 取消当前导航
+        self.ac.cancel_goal()
+        # 给 move_base 短暂时间处理 cancel，避免新旧 goal 状态冲突
+        rospy.sleep(0.1)
+
+        # 重发同一目标；send_goal 会重置 last_replan_time
+        self.send_goal(gx, gy)
+        # 重置导航开始时间：超时按"当前段"计算，避免长途导航被误杀
+        self.goal_start_time = rospy.Time.now()
 
     # ────────────── 可视化 ──────────────
     def publish_frontier_markers(self, frontiers, selected_goal=None):
@@ -413,6 +658,11 @@ class FrontierExplorer:
             # ── 正在导航中：检查状态 ──
             if self.is_navigating:
                 state = self.ac.get_state()
+
+                # ── 周期性重规划（建图期核心机制）──
+                # 仅在导航仍活跃（PENDING/ACTIVE）时触发，避免与成功/失败分支冲突
+                if state in (GoalStatus.PENDING, GoalStatus.ACTIVE):
+                    self._maybe_replan()
 
                 # 导航成功
                 if state == GoalStatus.SUCCEEDED:

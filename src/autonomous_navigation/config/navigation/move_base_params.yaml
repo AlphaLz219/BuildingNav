@@ -16,8 +16,8 @@ move_base:
   # 控制器等待超时（s），若在此时间内未产生有效指令则触发恢复行为
   # 适当增大，给 DWA 足够时间等待代价地图更新后再尝试
   controller_patience: 3.0
-  # 全局规划频率（Hz），每秒重新规划 2 次全局路径
-  planner_frequency: 2.0
+  # 全局规划频率（Hz），每秒重新规划 5 次全局路径
+  planner_frequency: 5.0
   # 全局规划器等待超时（s），若在此时间内未找到路径则触发恢复行为
   planner_patience: 5.0
 

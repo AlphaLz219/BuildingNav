@@ -15,14 +15,14 @@ DWAPlannerROS:
   min_vel_y: 0.0
   # 平移速度范围（m/s）
   max_vel_trans: 0.4
-  min_vel_trans: 0.01
+  min_vel_trans: 0.05
   # 旋转速度范围（rad/s），TB3 Burger 最大约 2.75 rad/s
   max_vel_theta: 1.5
   min_vel_theta: -1.5
 
   # ---- 加速度限制 ----
   # 线加速度限制（m/s²）
-  acc_lim_x: 0.8
+  acc_lim_x: 0.6
   # 差速驱动无横向加速度
   acc_lim_y: 0.0
   # 角加速度限制（rad/s²）
@@ -45,12 +45,14 @@ DWAPlannerROS:
   sim_granularity: 0.025
 
   # ---- 评价函数权重 ----
+  # score = path_distance_bias × path_dist + goal_distance_bias × goal_dist 
+  #                                        + occdist_scale × obstacle_cost
   # 路径跟随权重，适度跟随全局路径
   path_distance_bias: 24.0
   # 目标趋近权重，更积极地朝目标移动（穿窄道时更有效）
   goal_distance_bias: 32.0
   # 障碍物距离权重，适度远离障碍物
-  occdist_scale: 0.5
+  occdist_scale: 2.5
   # 旋转抑制权重，惩罚无意义的原地旋转
   twirling_scale: 0.5
   # 停车判定阈值（m），距目标小于此值时开始减速停车
@@ -65,8 +67,24 @@ DWAPlannerROS:
   # ---- 其他 ----
   # 前向参考点距离（m），用于评估轨迹是否朝向前方
   forward_point_distance: 0.2
-  # 目标容忍距离（m），到达目标 ±0.15m 视为到达
-  goal_tolerance: 0.15
+  # 位置容忍度（m），到达目标 ±此距离即认为到位
+  xy_goal_tolerance: 0.2
+
+  # 朝向容忍度（rad），到达目标朝向 ±此角度即认为到位
+  # 0.2 rad ≈ 11.5°，对真实机器人来说合理
+  yaw_goal_tolerance: 0.5
+
+  # 【关键】先锁位置再调朝向，避免位姿互扰
+  # true = 到达 xy 容忍度后，固定位置只旋转调朝向
+  latch_xy_goal_tolerance: true
+
+  # 原地旋转的最小角速度（rad/s），用于最后精细调姿
+  # 太低则无力克服摩擦力，太高则容易 overshoot
+  min_in_place_vel_theta: 0.3
+
+  # 角加速度也降一点，防止调姿时 overshoot 来回震荡
+  # 从 4.0 → 2.0
+  acc_lim_theta: 2.0
 
   # 裁剪已走过的全局路径段，减少规划器计算量
   prune_plan: true

@@ -5,7 +5,6 @@ Panels:
     Property Tree Widget:
       Expanded:
         - /Local Plan1
-        - /Odometry1
         - /Odometry1/Shape1
         - /Odometry1/Covariance1
         - /Odometry1/Covariance1/Position1
@@ -256,7 +255,7 @@ Visualization Manager:
       Value: true
     - Alpha: 1
       Class: rviz/RobotModel
-      Collision Enabled: false
+      Collision Enabled: true
       Enabled: true
       Links:
         All Links Enabled: true
@@ -335,7 +334,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 8.881994247436523
+      Distance: 22.644453048706055
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -343,9 +342,9 @@ Visualization Manager:
         Value: false
       Field of View: 0.7853981852531433
       Focal Point:
-        X: -0.17130805552005768
-        Y: 5.951786041259766
-        Z: -0.46013593673706055
+        X: -1.0509647130966187
+        Y: 13.937301635742188
+        Z: -0.4591764807701111
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
@@ -371,5 +370,5 @@ Window Geometry:
   Views:
     collapsed: false
   Width: 1379
-  X: 175
-  Y: 26
+  X: 143
+  Y: -6
