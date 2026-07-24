@@ -4,7 +4,6 @@ Panels:
     Name: Displays
     Property Tree Widget:
       Expanded:
-        - /Local Plan1
         - /Robot Model1
       Splitter Ratio: 0.5
     Tree Height: 623
@@ -127,7 +126,7 @@ Visualization Manager:
       Unreliable: false
       Use Timestamp: false
       Value: true
-    - Alpha: 0.10000000149011612
+    - Alpha: 1
       Class: rviz/Map
       Color Scheme: costmap
       Draw Behind: true
@@ -190,7 +189,7 @@ Visualization Manager:
       Marker Topic: /frontier_markers
       Name: Frontier Markers
       Namespaces:
-        {}
+        frontiers: true
       Queue Size: 100
       Value: true
     - Class: rviz/Marker
@@ -198,7 +197,7 @@ Visualization Manager:
       Marker Topic: /current_goal_marker
       Name: Current Goal
       Namespaces:
-        {}
+        current_goal: true
       Queue Size: 10
       Value: true
     - Alpha: 1
@@ -305,7 +304,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 16.54680061340332
+      Distance: 13.004304885864258
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -313,9 +312,9 @@ Visualization Manager:
         Value: false
       Field of View: 0.7853981852531433
       Focal Point:
-        X: 1.2876790761947632
-        Y: 8.913254737854004
-        Z: -0.06087031587958336
+        X: -0.7498018741607666
+        Y: 7.069645881652832
+        Z: -0.05886070057749748
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
@@ -339,5 +338,5 @@ Window Geometry:
   Views:
     collapsed: false
   Width: 1440
-  X: 29
-  Y: 7
+  X: 19
+  Y: -9

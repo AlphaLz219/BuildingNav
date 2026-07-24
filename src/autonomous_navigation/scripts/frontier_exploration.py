@@ -8,7 +8,7 @@
   1. 订阅 SLAM Toolbox 发布的 /map（OccupancyGrid）
   2. 检测前沿 —— 已知自由空间与未知空间的交界
   3. 对前沿点做连通域聚类，过滤噪声小簇
-  4. 用评分函数选出最优前沿簇作为导航目标
+  4. 用比值法评分（Score = Gain / (Cost + epsilon)）选出最优前沿簇
   5. 通过 move_base ActionClient 驱动机器人前往
   6. 到达后地图更新，重新检测前沿，循环直到探索完毕
 
@@ -49,12 +49,15 @@ class FrontierExplorer:
         self.min_frontier_size = rospy.get_param('~min_frontier_size', 20)
         # 前沿检测频率（Hz），不需要太高，地图更新较慢
         self.detection_freq = rospy.get_param('~detection_frequency', 0.5)
-        # 评分权重 —— 前沿大小（信息增益）
-        self.weight_size = rospy.get_param('~score_size_weight', 0.6)
-        # 评分权重 —— 距离（越近越好）
-        self.weight_dist = rospy.get_param('~score_distance_weight', 0.4)
-        # 评分权重 —— 目标点净空（距障碍物多远），0=不纳入评分
-        self.weight_clearance = rospy.get_param('~score_clearance_weight', 0.3)
+        # ── 比值法评分参数: Score = Gain / (Cost + epsilon) ──
+        # 计算 Gain 时，以簇目标点为中心膨胀的半径（栅格数）
+        self.gain_unknown_radius = rospy.get_param('~gain_unknown_radius', 15)
+        # 方向惩罚系数 λ，掉头（180°）时 Cost 增加此比例
+        self.direction_penalty = rospy.get_param('~direction_penalty', 0.4)
+        # 分母常数（米），防止近距离前沿得分爆炸
+        self.cost_epsilon = rospy.get_param('~cost_epsilon', 0.5)
+        # Cost 使用 make_plan 真实路径长度（True）还是欧氏距离（False）
+        self.use_path_length = rospy.get_param('~use_path_length', True)
         # 连续无前沿次数阈值，超过则判定探索完成
         self.max_no_frontier = rospy.get_param('~max_no_frontier_count', 5)
         # 导航超时（秒），超过则取消当前目标
@@ -206,17 +209,20 @@ class FrontierExplorer:
 
     def _get_robot_pose(self):
         """
-        通过 TF 查询机器人当前位置（map 坐标系下的世界坐标）
-        返回 (x, y) 或 (None, None) 如果查询失败
+        通过 TF 查询机器人当前位置和朝向（map 坐标系）
+        返回 (x, y, yaw) 或 (None, None, None) 如果查询失败
+        yaw 单位为弧度，范围 [-π, π]，0 = 朝 x 正方向
         """
         try:
-            (trans, _) = self.tf_listener.lookupTransform(
+            (trans, rot) = self.tf_listener.lookupTransform(
                 '/map', '/base_footprint', rospy.Time(0))
-            return trans[0], trans[1]
+            (_, _, yaw) = tf.transformations.euler_from_quaternion(
+                [rot[0], rot[1], rot[2], rot[3]])
+            return trans[0], trans[1], yaw
         except (tf.LookupException, tf.ConnectivityException,
                 tf.ExtrapolationException):
             rospy.logwarn("[前沿探索] TF 查询 /map → /base_footprint 失败")
-            return None, None
+            return None, None, None
 
     # ────────────── 前沿检测 ──────────────
     def detect_frontiers(self):
@@ -306,91 +312,153 @@ class FrontierExplorer:
 
         return frontiers
 
+    # ────────────── 信息增益计算 ──────────────
+    def _compute_gain(self, world_x, world_y):
+        """
+        计算目标点周围的信息增益（未知像素占比）。
+
+        以 (world_x, world_y) 为中心，在 gain_unknown_radius 栅格半径的
+        圆形区域内，统计未知空间像素占有效像素（非地图边界外）的比例。
+
+        返回：0.0 ~ 1.0，值越高表示该区域越"未知"，探索价值越大
+        """
+        if self.map_data is None:
+            return 0.0
+
+        col = int((world_x - self.map_origin_x) / self.map_resolution)
+        row = int((world_y - self.map_origin_y) / self.map_resolution)
+
+        r = self.gain_unknown_radius
+        h, w = self.map_data.shape
+
+        # 裁剪到地图边界
+        r_min = max(0, row - r)
+        r_max = min(h, row + r + 1)
+        c_min = max(0, col - r)
+        c_max = min(w, col + r + 1)
+
+        if r_min >= r_max or c_min >= c_max:
+            return 0.0
+
+        patch = self.map_data[r_min:r_max, c_min:c_max]
+
+        # 构建圆形掩码
+        rr, cc = np.mgrid[r_min:r_max, c_min:c_max]
+        dist_sq = (rr - row)**2 + (cc - col)**2
+        circle = dist_sq <= r * r
+
+        valid_pixels = np.sum(circle)
+        if valid_pixels == 0:
+            return 0.0
+
+        unknown_pixels = np.sum(circle & (patch == -1))
+        return float(unknown_pixels) / float(valid_pixels)
+
     # ────────────── 目标选择 ──────────────
     def select_best_goal(self, frontiers):
         """
-        从前沿簇中选择评分最高的导航目标。
+        从前沿簇中选择评分最高的导航目标（比值法）。
 
-        评分函数（三因素加权）：
-            score = w_size × (size/max_size)       信息增益分量
-                  + w_dist × 1/(dist+0.1)          距离分量
-                  + w_clear × clearance_score      安全净空分量
+        评分函数：
+            Score = Gain / (Cost + epsilon)
 
-        过滤条件：
-            - 黑名单中的前沿
-            - 距离机器人太近的前沿
+            Gain = 目标点周围圆形区域内未知像素占比 (0~1)
+            Cost = distance × (1 + direction_penalty × angle_diff / 180)
+                   distance 为 make_plan 路径长度或欧氏距离
+            epsilon = cost_epsilon，防止分母趋近零
+
+        流程：
+          1. 过滤黑名单和过近的前沿
+          2. 计算 Gain 和初步 Cost（欧氏距离 + 方向惩罚）
+          3. 按初步评分排序，依次调用 make_plan 验证可达性
+          4. 若 use_path_length=True，用真实路径长度重算 Cost
+          5. 返回最终评分最高的目标
 
         返回：(goal_x, goal_y, score) 或 None
         """
         if not frontiers:
             return None
 
-        robot_x, robot_y = self._get_robot_pose()
+        robot_x, robot_y, robot_yaw = self._get_robot_pose()
         if robot_x is None:
             return None
 
-        # 按权重分配比例，确保三个分量和为 1.0
-        # 净空权重从已有的 size+dist 中匀出一部分
-        w_clear = self.weight_clearance
-        w_size = self.weight_size * (1.0 - w_clear)
-        w_dist = self.weight_dist * (1.0 - w_clear)
-
-        # 最大前沿簇大小（用于归一化）
-        max_size = max(f[2] for f in frontiers)
-
         candidates = []
         for (fx, fy, fsize) in frontiers:
-            # 跳过黑名单
             if self._is_blacklisted(fx, fy):
                 continue
 
-            # 计算到机器人的距离
             dist = np.sqrt((fx - robot_x)**2 + (fy - robot_y)**2)
             if dist < self.min_goal_distance:
                 continue
 
-            # ── 查询该目标点的净空（通过距离变换缓存）──
-            clearance = 0.0
-            if self._dist_transform is not None:
-                col = int((fx - self.map_origin_x) / self.map_resolution)
-                row = int((fy - self.map_origin_y) / self.map_resolution)
-                if 0 <= row < self.map_height and 0 <= col < self.map_width:
-                    clearance = (
-                        self._dist_transform[row, col] * self.map_resolution)
-            # 归一化：假设最大合理净空约 2m
-            clearance_score = min(clearance / 2.0, 1.0)
+            # 计算信息增益
+            gain = self._compute_gain(fx, fy)
 
-            # 三项归一化评分
-            size_score = fsize / max_size           # 0~1
-            dist_score = 1.0 / (dist + 0.1)         # 越近越高
-            score = (w_size * size_score +
-                     w_dist * dist_score +
-                     w_clear * clearance_score)
-            candidates.append((fx, fy, fsize, score))
+            # 方向惩罚：计算目标方位角与机器人朝向的差
+            if robot_yaw is not None:
+                target_angle = np.arctan2(fy - robot_y, fx - robot_x)
+                angle_diff = abs(target_angle - robot_yaw)
+                if angle_diff > np.pi:
+                    angle_diff = 2.0 * np.pi - angle_diff
+                angle_deg = np.degrees(angle_diff)
+            else:
+                angle_deg = 90.0  # 无朝向信息时给中间值
+
+            # 初步 Cost（用欧氏距离，用于排序候选）
+            prelim_cost = dist * (
+                1.0 + self.direction_penalty * angle_deg / 180.0)
+            prelim_score = gain / (prelim_cost + self.cost_epsilon)
+
+            candidates.append(
+                (fx, fy, fsize, gain, angle_deg, prelim_score))
 
         if not candidates:
             return None
 
-        # 按评分降序排列
-        candidates.sort(key=lambda c: c[3], reverse=True)
+        # 按初步评分降序排列（优先验证高分候选）
+        candidates.sort(key=lambda c: c[5], reverse=True)
 
-        # 按评分从高到低遍历，选第一个通过 make_plan 预检的目标
-        for (fx, fy, fsize, score) in candidates:
-            if not self._is_goal_reachable(fx, fy):
+        best_result = None
+        best_score = -1.0
+
+        for (fx, fy, fsize, gain, angle_deg, _) in candidates:
+            reachable, path_length = self._is_goal_reachable(fx, fy)
+
+            if not reachable:
                 rospy.loginfo(
-                    "[前沿探索] make_plan 预检失败，跳过 (%.2f,%.2f) 评分=%.3f",
-                    fx, fy, score)
-                # 不可达的目标也加入黑名单，避免后续重复检查
+                    "[前沿探索] make_plan 预检失败，跳过 (%.2f,%.2f) "
+                    "Gain=%.2f", fx, fy, gain)
                 self.blacklist.append((fx, fy))
                 continue
 
-            rospy.loginfo(
-                "[前沿探索] make_plan 预检通过 (%.2f,%.2f) 评分=%.3f",
-                fx, fy, score)
-            return fx, fy, score
+            # 根据配置选择 Cost 的距离来源
+            if self.use_path_length and path_length > 0.0:
+                distance = path_length
+            else:
+                distance = np.sqrt(
+                    (fx - robot_x)**2 + (fy - robot_y)**2)
 
-        # 所有候选都未通过预检
-        return None
+            # 最终 Cost = 距离 × (1 + λ × 方向角/180)
+            cost = distance * (
+                1.0 + self.direction_penalty * angle_deg / 180.0)
+            score = gain / (cost + self.cost_epsilon)
+
+            rospy.loginfo(
+                "[前沿探索] 候选 (%.2f,%.2f): Gain=%.3f Cost=%.2fm "
+                "方向=%.0f° Score=%.4f",
+                fx, fy, gain, cost, angle_deg, score)
+
+            if score > best_score:
+                best_score = score
+                best_result = (fx, fy, score)
+
+        if best_result is not None:
+            rospy.loginfo(
+                "[前沿探索] make_plan 预检通过 (%.2f,%.2f) Score=%.4f",
+                best_result[0], best_result[1], best_result[2])
+
+        return best_result
 
     def _is_blacklisted(self, x, y):
         """检查 (x, y) 是否在黑名单中（之前导航失败的目标附近）"""
@@ -401,17 +469,18 @@ class FrontierExplorer:
 
     def _is_goal_reachable(self, x, y):
         """
-        通过 /move_base/make_plan 服务预检查目标是否可达。
+        通过 /move_base/make_plan 服务预检查目标是否可达，并计算路径长度。
 
         校验条件：
           1. 路径至少 5 个位姿（排除仅有起点的退化情况）
           2. 路径终点与目标距离 < 1.0m（确认真到达目标附近，而非半路中断）
 
-        返回：True（可达） 或 False
+        返回：(True, path_length) 可达时，path_length 为路径总长（米）
+              (False, 0.0) 不可达时
         """
-        robot_x, robot_y = self._get_robot_pose()
+        robot_x, robot_y, _ = self._get_robot_pose()
         if robot_x is None:
-            return False
+            return False, 0.0
 
         req = GetPlanRequest()
         req.start.header.frame_id = 'map'
@@ -435,14 +504,14 @@ class FrontierExplorer:
             if resp.plan is None or len(resp.plan.poses) == 0:
                 rospy.loginfo(
                     "[前沿探索] make_plan 返回空路径 (%.2f,%.2f)", x, y)
-                return False
+                return False, 0.0
 
             # 校验 1：路径至少 5 个点，排除退化情况
             if len(resp.plan.poses) < 5:
                 rospy.loginfo(
                     "[前沿探索] make_plan 路径太短 (%d 点)，跳过 (%.2f,%.2f)",
                     len(resp.plan.poses), x, y)
-                return False
+                return False, 0.0
 
             # 校验 2：路径终点必须在目标附近（< 1.0m），否则是半路中断
             last_pose = resp.plan.poses[-1].pose.position
@@ -452,12 +521,20 @@ class FrontierExplorer:
                     "[前沿探索] make_plan 路径未达目标 (距目标 %.2fm)，"
                     "跳过 (%.2f,%.2f)",
                     end_dist, x, y)
-                return False
+                return False, 0.0
 
-            return True
+            # 计算路径总长度（逐段累加）
+            path_length = 0.0
+            for i in range(1, len(resp.plan.poses)):
+                p1 = resp.plan.poses[i - 1].pose.position
+                p2 = resp.plan.poses[i].pose.position
+                path_length += np.sqrt(
+                    (p2.x - p1.x)**2 + (p2.y - p1.y)**2)
+
+            return True, path_length
         except rospy.ServiceException as e:
             rospy.logwarn("[前沿探索] make_plan 服务调用异常: %s", e)
-            return False
+            return False, 0.0
 
     # ────────────── 导航控制 ──────────────
     def send_goal(self, x, y):
@@ -523,7 +600,7 @@ class FrontierExplorer:
             return
 
         gx, gy = self.current_goal_xy
-        robot_x, robot_y = self._get_robot_pose()
+        robot_x, robot_y, _ = self._get_robot_pose()
         if robot_x is None:
             return
 

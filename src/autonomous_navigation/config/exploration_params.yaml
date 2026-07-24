@@ -11,14 +11,25 @@ min_frontier_size: 20
 # 前沿检测频率（Hz），不需要太高，SLAM Toolbox 地图更新约 0.5Hz
 detection_frequency: 0.5
 
-# ---- 目标评分 ----
-# 前沿大小权重（信息增益），越大 → 优先选大前沿
-score_size_weight: 0.6
-# 距离权重（越近越好），越大 → 优先选近处前沿（减少行驶距离）
-score_distance_weight: 0.4
-# 安全净空权重（距障碍物多远），越大 → 优先选宽敞安全的目标
-# 三个权重自动归一化，和恒为 1.0
-score_clearance_weight: 0.3
+# ---- 目标评分（比值法: Score = Gain / (Cost + epsilon)）----
+# 计算 Gain 时，以簇目标点为中心膨胀的半径（栅格数）
+# 该圆内未知像素占比即为 Gain（0~1）
+# 半径太小只看局部容易被噪声干扰，太大则和远处前沿的区分度降低
+# 15 栅格 × 0.05m = 0.75m 半径
+gain_unknown_radius: 15
+
+# 方向惩罚系数 λ，掉头（180°）时 Cost 增加此比例
+# 例：0.4 表示掉头 Cost×1.4，侧方（90°）Cost×1.2
+# 值越大机器人越不愿掉头，值太小则方向约束弱
+direction_penalty: 0.4
+
+# 分母常数（米），Cost 不会低于此值，防止近距离前沿得分爆炸
+# 0.5m 意味着即使前沿就在脚下，Score 也不会超过 Gain/0.5
+cost_epsilon: 0.5
+
+# Cost 使用 make_plan 返回的真实路径长度（true）还是欧氏距离（false）
+# true 更准确（考虑绕墙），但对每个候选都要调服务；false 更快
+use_path_length: true
 
 # ---- 目标安全过滤 ----
 # 目标点距最近障碍物的最小净空（米），低于此值的前沿簇直接跳过

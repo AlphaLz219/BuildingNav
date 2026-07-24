@@ -84,7 +84,7 @@ DWAPlannerROS:
 
   # 角加速度也降一点，防止调姿时 overshoot 来回震荡
   # 从 4.0 → 2.0
-  acc_lim_theta: 2.0
+  # acc_lim_theta: 2.0
 
   # 裁剪已走过的全局路径段，减少规划器计算量
   prune_plan: true
