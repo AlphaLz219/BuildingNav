@@ -14,11 +14,11 @@ DWAPlannerROS:
   max_vel_y: 0.0
   min_vel_y: 0.0
   # 平移速度范围（m/s）
-  max_vel_trans: 0.4
-  min_vel_trans: 0.05
+  max_vel_trans: 0.7
+  min_vel_trans: 0.0
   # 旋转速度范围（rad/s），TB3 Burger 最大约 2.75 rad/s
-  max_vel_theta: 1.5
-  min_vel_theta: -1.5
+  max_vel_theta: 4.5
+  min_vel_theta: -4.5
 
   # ---- 加速度限制 ----
   # 线加速度限制（m/s²）
@@ -36,7 +36,7 @@ DWAPlannerROS:
   # 前向仿真时间（s），越长 DWA 评估越远，敢选更高速度
   sim_time: 2.5
   # 线速度采样数量（越多速度选择越精细）
-  vx_samples: 15
+  vx_samples: 20
   # 横向速度采样数量（差速驱动为 0）
   vy_samples: 0
   # 角速度采样数量
@@ -81,10 +81,6 @@ DWAPlannerROS:
   # 原地旋转的最小角速度（rad/s），用于最后精细调姿
   # 太低则无力克服摩擦力，太高则容易 overshoot
   min_in_place_vel_theta: 0.3
-
-  # 角加速度也降一点，防止调姿时 overshoot 来回震荡
-  # 从 4.0 → 2.0
-  # acc_lim_theta: 2.0
 
   # 裁剪已走过的全局路径段，减少规划器计算量
   prune_plan: true

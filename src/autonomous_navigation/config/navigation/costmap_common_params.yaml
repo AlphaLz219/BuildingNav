@@ -7,7 +7,7 @@
 # ============================================================
 
 # 机器人外接圆半径（TB3 Burger 底盘 ~0.105m），用于碰撞检测
-robot_radius: 0.105
+robot_radius: 0.025
 
 # 顶层参数作为 obstacle_layer 回退读取的默认值
 obstacle_range: 5.0
@@ -49,6 +49,6 @@ obstacle_layer:
 # ---- 膨胀层（必须在 inflation_layer 命名空间下） ----
 inflation_layer:
   # 膨胀半径（m），障碍物周围的安全缓冲区域
-  inflation_radius: 0.10
-  # 膨胀衰减系数，越大则黄色区域越窄（代价衰减越快）
-  cost_scaling_factor: 6.0
+  inflation_radius: 0.1
+  # 膨胀衰减系数
+  cost_scaling_factor: 3.0

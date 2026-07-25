@@ -539,10 +539,9 @@ class FrontierExplorer:
     # ────────────── 导航控制 ──────────────
     def send_goal(self, x, y):
         """
-        发送导航目标到 move_base（通过 ActionClient）
-        
-        使用 MoveBaseAction 而非 /move_base_simple/goal，
-        因为 ActionClient 支持：取消目标、获取详细状态、等待结果
+        发送导航目标到 move_base，朝向设定为从机器人当前位置指向目标的方向。
+
+        这样机器人到达时自然面朝行进方向，无需额外旋转调姿。
         """
         goal = MoveBaseGoal()
         goal.target_pose.header.frame_id = 'map'
@@ -550,13 +549,18 @@ class FrontierExplorer:
         goal.target_pose.pose.position.x = x
         goal.target_pose.pose.position.y = y
         goal.target_pose.pose.position.z = 0.0
-        # 不指定朝向（w=1 表示无旋转）
-        goal.target_pose.pose.orientation.x = 0.0
-        goal.target_pose.pose.orientation.y = 0.0
-        goal.target_pose.pose.orientation.z = 0.0
-        goal.target_pose.pose.orientation.w = 1.0
 
-        rospy.loginfo("[前沿探索] 发送导航目标: (%.2f, %.2f)", x, y)
+        # ── 朝向 = 机器人当前位置 → 目标方向 ──
+        robot_x, robot_y, _ = self._get_robot_pose()
+        if robot_x is not None and (x != robot_x or y != robot_y):
+            yaw = np.arctan2(y - robot_y, x - robot_x)
+        else:
+            yaw = 0.0
+        goal.target_pose.pose.orientation.z = np.sin(yaw / 2.0)
+        goal.target_pose.pose.orientation.w = np.cos(yaw / 2.0)
+
+        rospy.loginfo("[前沿探索] 发送导航目标: (%.2f, %.2f) yaw=%.1f°",
+                      x, y, np.degrees(yaw))
         self.ac.send_goal(goal)
         self.is_navigating = True
         self.goal_start_time = rospy.Time.now()
