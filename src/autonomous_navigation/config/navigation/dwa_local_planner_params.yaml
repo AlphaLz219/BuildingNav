@@ -7,22 +7,22 @@
 DWAPlannerROS:
   # ---- 速度限制 ----
   # 最大前进速度（m/s），TB3 Burger 最大 0.22 m/s
-  max_vel_x: 1.0
+  max_vel_x: 0.4
   # 禁止倒车（设为 0），防止 DWA 在弯道或墙边选择倒车轨迹
-  min_vel_x: -1.0
+  min_vel_x: -0.1
   # 横向速度（差速驱动无横向运动能力）
   max_vel_y: 0.0
   min_vel_y: 0.0
   # 平移速度范围（m/s）
-  max_vel_trans: 0.7
+  max_vel_trans: 0.4
   min_vel_trans: 0.0
   # 旋转速度范围（rad/s），TB3 Burger 最大约 2.75 rad/s
-  max_vel_theta: 4.5
-  min_vel_theta: -4.5
+  max_vel_theta: 2.5
+  min_vel_theta: -2.5
 
   # ---- 加速度限制 ----
   # 线加速度限制（m/s²）
-  acc_lim_x: 0.6
+  acc_lim_x: 0.3
   # 差速驱动无横向加速度
   acc_lim_y: 0.0
   # 角加速度限制（rad/s²）
@@ -48,11 +48,11 @@ DWAPlannerROS:
   # score = path_distance_bias × path_dist + goal_distance_bias × goal_dist 
   #                                        + occdist_scale × obstacle_cost
   # 路径跟随权重，适度跟随全局路径
-  path_distance_bias: 24.0
+  path_distance_bias: 40.0
   # 目标趋近权重，更积极地朝目标移动（穿窄道时更有效）
   goal_distance_bias: 32.0
   # 障碍物距离权重，适度远离障碍物
-  occdist_scale: 2.5
+  occdist_scale: 0.05
   # 旋转抑制权重，惩罚无意义的原地旋转
   twirling_scale: 0.5
   # 停车判定阈值（m），距目标小于此值时开始减速停车

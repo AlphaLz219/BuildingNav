@@ -26,7 +26,7 @@ from nav_msgs.srv import GetPlan, GetPlanRequest
 from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal
 from actionlib_msgs.msg import GoalStatus
 from visualization_msgs.msg import Marker, MarkerArray
-from geometry_msgs.msg import Point, PoseStamped
+from geometry_msgs.msg import Point, PoseStamped, Twist
 from std_msgs.msg import ColorRGBA
 
 
@@ -77,6 +77,16 @@ class FrontierExplorer:
         self.replan_interval = rospy.get_param('~replan_interval', 6.0)
         # 距目标小于此距离时停止重规划，避免接近目标时反复取消导致振荡
         self.replan_min_dist = rospy.get_param('~replan_min_distance', 1.5)
+        # ── 目标过时检测 ──
+        # Gain 衰减阈值，当前 Gain 低于出发时 Gain × 此比例即判定过时
+        self.gain_decay_threshold = rospy.get_param(
+            '~gain_decay_threshold', 0.3)
+        # 距目标小于此距离（米）时才开始检查过时，避免远距离误判
+        self.stale_check_distance = rospy.get_param(
+            '~stale_check_distance', 3.0)
+        # 过时检查频率（秒），独立于重规划周期，可更快响应目标过时
+        self.stale_check_interval = rospy.get_param(
+            '~stale_check_interval', 2.0)
         # 重规划前要求 /map 至少更新过一次（避免 SLAM 未就绪时反复重发）
         self._last_map_stamp = None
 
@@ -103,6 +113,8 @@ class FrontierExplorer:
         # 周期性重规划状态
         self.current_goal_xy = None    # (x, y) 当前正在导航的目标坐标
         self.last_replan_time = None   # 上次重规划触发时刻
+        self.goal_gain = None          # 发送目标时记录的初始 Gain（用于过时检测）
+        self.last_stale_check_time = None  # 上次过时检查时刻
 
     def _init_ros_interface(self):
         """初始化 ROS 接口：TF、ActionClient、发布器、订阅器"""
@@ -128,6 +140,9 @@ class FrontierExplorer:
         # 发布器 —— 当前探索目标标记
         self.goal_marker_pub = rospy.Publisher(
             '/current_goal_marker', Marker, queue_size=1, latch=True)
+        # 发布器 —— 直接发送零速度强制停车（取消目标后使用）
+        self.cmd_vel_pub = rospy.Publisher(
+            '/cmd_vel', Twist, queue_size=1)
 
         # 订阅器 —— SLAM Toolbox 的栅格地图
         rospy.Subscriber('/map', OccupancyGrid, self._map_callback)
@@ -566,15 +581,45 @@ class FrontierExplorer:
         self.goal_start_time = rospy.Time.now()
         self.current_goal_xy = (x, y)
         self.last_replan_time = rospy.Time.now()
+        # 记录初始 Gain 和检查时间，用于过时检测
+        self.goal_gain = self._compute_gain(x, y)
+        self.last_stale_check_time = rospy.Time.now()
+        rospy.loginfo("[前沿探索] 初始 Gain=%.3f", self.goal_gain)
 
     def cancel_goal(self):
         """取消当前导航目标"""
         self.ac.cancel_goal()
+        self._force_stop()
         self.is_navigating = False
         self.goal_start_time = None
         self.current_goal_xy = None
         self.last_replan_time = None
+        self.goal_gain = None
+        self.last_stale_check_time = None
         rospy.loginfo("[前沿探索] 已取消当前导航目标")
+
+    def _force_stop(self):
+        """
+        强制停止机器人并等待 move_base 进入终态。
+
+        cancel_goal() 只是发请求，move_base 可能仍在执行恢复行为
+        （如 rotate_recovery 旋转 360°）或 DWA 的残余速度指令。
+        此方法直接发布零速度并等待 move_base 状态变为终态。
+        """
+        stop = Twist()
+        for _ in range(5):
+            self.cmd_vel_pub.publish(stop)
+            rospy.sleep(0.05)
+
+        deadline = rospy.Time.now() + rospy.Duration(2.0)
+        while rospy.Time.now() < deadline:
+            state = self.ac.get_state()
+            if state in (GoalStatus.SUCCEEDED, GoalStatus.ABORTED,
+                         GoalStatus.REJECTED, GoalStatus.LOST):
+                break
+            rospy.sleep(0.1)
+        # 最后再发一次确保停稳
+        self.cmd_vel_pub.publish(stop)
 
     # ────────────── 周期性重规划（建图期）──────────────
     def _maybe_replan(self):
@@ -626,6 +671,54 @@ class FrontierExplorer:
         self.send_goal(gx, gy)
         # 重置导航开始时间：超时按"当前段"计算，避免长途导航被误杀
         self.goal_start_time = rospy.Time.now()
+
+    # ────────────── 目标过时检测 ──────────────
+    def _check_stale_goal(self):
+        """
+        独立于重规划周期，检查当前导航目标是否过时。
+
+        判定逻辑：
+          1. 距上次检查已超过 stale_check_interval 秒
+          2. 机器人距目标小于 stale_check_distance（进入传感器有效范围）
+          3. 当前 Gain < 出发时 Gain × gain_decay_threshold
+
+        满足以上条件时取消当前导航，回到空闲状态重新选目标。
+        返回 True 表示目标已过时（调用方应跳过后续状态检查）。
+        """
+        if self.current_goal_xy is None:
+            return False
+        if self.goal_gain is None or self.goal_gain <= 0.0:
+            return False
+        if self.last_stale_check_time is None:
+            return False
+
+        now = rospy.Time.now()
+        if (now - self.last_stale_check_time).to_sec() < self.stale_check_interval:
+            return False
+
+        self.last_stale_check_time = now
+
+        gx, gy = self.current_goal_xy
+        robot_x, robot_y, _ = self._get_robot_pose()
+        if robot_x is None:
+            return False
+
+        dist = np.sqrt((gx - robot_x) ** 2 + (gy - robot_y) ** 2)
+        if dist >= self.stale_check_distance:
+            return False
+
+        current_gain = self._compute_gain(gx, gy)
+        threshold = self.goal_gain * self.gain_decay_threshold
+        if current_gain >= threshold:
+            return False
+
+        rospy.loginfo(
+            "[前沿探索] ⚠ 目标过时: Gain %.3f → %.3f "
+            "(阈值 %.3f, 距目标 %.2fm), 取消并重新选择",
+            self.goal_gain, current_gain, threshold, dist)
+        self.cancel_goal()
+        self._clear_goal_marker()
+        return True
 
     # ────────────── 可视化 ──────────────
     def publish_frontier_markers(self, frontiers, selected_goal=None):
@@ -740,16 +833,22 @@ class FrontierExplorer:
             if self.is_navigating:
                 state = self.ac.get_state()
 
-                # ── 周期性重规划（建图期核心机制）──
+                # ── 周期性重规划 + 目标过时检测 ──
                 # 仅在导航仍活跃（PENDING/ACTIVE）时触发，避免与成功/失败分支冲突
-                if state in (GoalStatus.PENDING, GoalStatus.ACTIVE):
-                    self._maybe_replan()
+                # if state in (GoalStatus.PENDING, GoalStatus.ACTIVE):
+                #     self._maybe_replan()
+                #     # 独立计时器的过时检查（比重规划更频繁）
+                #     if self._check_stale_goal():
+                #         rate.sleep()
+                #         continue
 
                 # 导航成功
                 if state == GoalStatus.SUCCEEDED:
                     rospy.loginfo("[前沿探索] ✓ 导航成功，继续检测前沿")
                     self.is_navigating = False
                     self.goal_start_time = None
+                    self.goal_gain = None
+                    self.last_stale_check_time = None
                     self.no_frontier_count = 0  # 重置计数
                     self._clear_goal_marker()
 
@@ -761,6 +860,8 @@ class FrontierExplorer:
                         state)
                     self.is_navigating = False
                     self.goal_start_time = None
+                    self.goal_gain = None
+                    self.last_stale_check_time = None
                     # 注意：黑名单在 send_goal 之前已加入，此处无需重复
                     self._clear_goal_marker()
 

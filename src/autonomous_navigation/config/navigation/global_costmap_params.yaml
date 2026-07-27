@@ -28,3 +28,6 @@ global_costmap:
     - {name: static_layer, type: costmap_2d::StaticLayer}
     # 膨胀层：在障碍物周围生成代价梯度（黄色区域），防止机器人贴墙
     - {name: inflation_layer, type: costmap_2d::InflationLayer}
+    # 注意：全局代价地图不使用 obstacle_layer，避免激光 clearing 清除
+    # static_layer 的墙壁标记导致全局路径穿墙。动态避障由 local_costmap 处理。
+

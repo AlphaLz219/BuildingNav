@@ -4,7 +4,7 @@
   <arg name="world_file"   default="$(find autonomous_navigation)/../../generated_building/competition_scene.world"
                            doc="比赛场景世界文件"/>
   <arg name="robot_x"      default="0.0"    doc="机器人出生点 X (m)"/>
-  <arg name="robot_y"      default="1.0"   doc="机器人出生点 Y (m)"/>
+  <arg name="robot_y"      default="1.3"   doc="机器人出生点 Y (m)"/>
   <arg name="robot_z"      default="0.0"    doc="机器人出生点 Z (m)"/>
   <arg name="robot_yaw"    default="1.5708" doc="机器人朝向 yaw (rad)，默认 π/2 面朝建筑入口"/>
   <arg name="gui"          default="true"/>
@@ -49,7 +49,6 @@
         name="pointcloud_converter" output="screen"/>
 
   <!-- ============= 5.5 水平激光坐标系（确保投影面严格水平） ========= -->
-  <!--     Mid360 安装有 45° 俯仰，pointcloud_to_laserscan 要求 target_frame Z 轴竖直 -->
   <!--     创建与 base_link 平行的虚拟坐标系，位于 laser_livox 相同位置        -->
   <node pkg="tf" type="static_transform_publisher"
         name="laser_livox_level_tf"
@@ -89,10 +88,10 @@
     <param name="map_update_interval"      value="0.5"/>
     <param name="transform_publish_period" value="0.05"/>
 
-    <param name="minimum_travel_distance" value="0.1"/>
+    <param name="minimum_travel_distance" value="0.05"/>
     <param name="minimum_travel_heading"  value="0.05"/>
     <param name="scan_buffer_size"        value="10"/>
-    <param name="minimum_time_interval"   value="0.3"/>
+    <param name="minimum_time_interval"   value="0.2"/>
 
     <param name="link_match_minimum_response_fine" value="0.6"/>
     <param name="link_scan_max_distance"           value="0.3"/>

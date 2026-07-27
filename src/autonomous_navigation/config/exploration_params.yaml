@@ -60,10 +60,24 @@ navigation_timeout: 120.0
 # 基于最新 global_costmap 重新调用全局规划器。
 # 解决 SLAM 地图持续扩展时机器人死守旧路径、无视新捷径的问题。
 # 设为 0 或负数关闭此功能；过小（<3s）可能造成 cmd_vel 抖动
-replan_interval: 6.0
+replan_interval: 0.0
 
 # 距目标小于此距离时停止重规划（米），避免接近目标时反复取消导致振荡
-replan_min_distance: 3.5
+replan_min_distance: 4.5
+
+# ---- 目标过时检测 ----
+# Gain 衰减阈值，当前 Gain 低于出发时 Gain × 此比例即判定目标过时
+# 例：0.3 表示目标区域 70% 的未知空间已被观测到则放弃该目标
+# 值太低容易误判（大房间入口场景），值太高则反应迟钝
+gain_decay_threshold: 0.3
+
+# 距目标小于此距离（米）时才开始检查过时，避免远距离 SLAM 回环误判
+# 约等于激光雷达在建筑内的有效观测半径
+stale_check_distance: 3.0
+
+# 过时检查间隔（秒）
+# 2s 意味着机器人接近目标后每 2 秒评估一次 Gain 衰减
+stale_check_interval: 2.0
 
 # 黑名单半径（米），导航失败的目标周围此范围内不再重复尝试
 blacklist_radius: 1.5
