@@ -835,12 +835,12 @@ class FrontierExplorer:
 
                 # ── 周期性重规划 + 目标过时检测 ──
                 # 仅在导航仍活跃（PENDING/ACTIVE）时触发，避免与成功/失败分支冲突
-                # if state in (GoalStatus.PENDING, GoalStatus.ACTIVE):
-                #     self._maybe_replan()
-                #     # 独立计时器的过时检查（比重规划更频繁）
-                #     if self._check_stale_goal():
-                #         rate.sleep()
-                #         continue
+                if state in (GoalStatus.PENDING, GoalStatus.ACTIVE):
+                    self._maybe_replan()
+                    # 独立计时器的过时检查（比重规划更频繁）
+                    if self._check_stale_goal():
+                        rate.sleep()
+                        continue
 
                 # 导航成功
                 if state == GoalStatus.SUCCEEDED:

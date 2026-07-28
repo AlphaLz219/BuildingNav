@@ -48,7 +48,7 @@ DWAPlannerROS:
   # score = path_distance_bias × path_dist + goal_distance_bias × goal_dist 
   #                                        + occdist_scale × obstacle_cost
   # 路径跟随权重，适度跟随全局路径
-  path_distance_bias: 40.0
+  path_distance_bias: 24.0
   # 目标趋近权重，更积极地朝目标移动（穿窄道时更有效）
   goal_distance_bias: 32.0
   # 障碍物距离权重，适度远离障碍物

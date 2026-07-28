@@ -15,7 +15,7 @@ GlobalPlanner:
   # false = 使用新版行为（推荐）
   old_behavior: false
 
-  default_tolerance: 0.5  # 目标姿态容忍度
+  default_tolerance: 0.2  # 目标姿态容忍度
   # 障碍物（致死）栅格的代价值（0~254），253 接近最大值
   lethal_cost: 253
   # 自由空间的基础代价值，规划器会尽量避开高代价区域

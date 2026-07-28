@@ -7,13 +7,13 @@
 # ============================================================
 
 # 机器人外接圆半径（TB3 Burger 底盘 ~0.105m），用于碰撞检测
-robot_radius: 0.105
+robot_radius: 0.055
 
 # 顶层参数作为 obstacle_layer 回退读取的默认值
 obstacle_range: 5.0
 raytrace_range: 6.0
 
-# ---- 障碍层（必须在 obstacle_layer 命名空间下） ----
+# ---- 障碍层
 obstacle_layer:
   observation_sources: scan_2d
   # 障碍物检测最大距离（m）

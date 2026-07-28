@@ -5,9 +5,6 @@
 
   <!-- ======================== Move Base ======================== -->
   <node pkg="move_base" type="move_base" name="move_base" respawn="false" output="screen">
-    <param name="base_global_planner" value="global_planner/GlobalPlanner"/>
-    <param name="base_local_planner"  value="dwa_local_planner/DWAPlannerROS"/>
-
     <!-- 里程计话题：Gazebo diff_drive 发布在 /Odometry_gazebo -->
     <remap from="odom" to="Odometry_gazebo"/>
 
