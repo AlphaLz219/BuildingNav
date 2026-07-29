@@ -1,17 +1,17 @@
 {
-  "building_config": "/home/liu/ros1_Project/BuildingNav_ws/generated_building/building_config.json",
+  "building_config": "/home/lab/rosProject/BuildingNav/generated_building/building_config.json",
   "competition_interfaces": {
     "odometry_topic": "/Odometry_gazebo",
-    "team_detection_file": "/home/liu/ros1_Project/BuildingNav_ws/results/detected_danger.json",
-    "truth_file_for_referee": "/home/liu/ros1_Project/BuildingNav_ws/results/danger_truth.json",
+    "team_detection_file": "/home/lab/rosProject/BuildingNav/results/detected_danger.json",
+    "truth_file_for_referee": "/home/lab/rosProject/BuildingNav/results/danger_truth.json",
     "velocity_command_topic": "/cmd_vel"
   },
-  "danger_count": 5,
-  "distractor_count": 6,
-  "door_config": "/home/liu/ros1_Project/BuildingNav_ws/generated_building/door_config.yaml",
-  "elevator_config": "/home/liu/ros1_Project/BuildingNav_ws/generated_building/elevator_config.yaml",
-  "layout_metadata": "/home/liu/ros1_Project/BuildingNav_ws/generated_building/layout_metadata.json",
-  "output_truth_file": "/home/liu/ros1_Project/BuildingNav_ws/generated_building/danger_truth.json",
+  "danger_count": 3,
+  "distractor_count": 4,
+  "door_config": "/home/lab/rosProject/BuildingNav/generated_building/door_config.yaml",
+  "elevator_config": "/home/lab/rosProject/BuildingNav/generated_building/elevator_config.yaml",
+  "layout_metadata": "/home/lab/rosProject/BuildingNav/generated_building/layout_metadata.json",
+  "output_truth_file": "/home/lab/rosProject/BuildingNav/generated_building/danger_truth.json",
   "robot_start": {
     "x": 0.0,
     "y": -2.2,
@@ -19,9 +19,9 @@
     "z": 0.6
   },
   "schema": "competition_scene_manifest_v1",
-  "seed": 1613403848,
-  "source_count": 11,
-  "truth_file": "/home/liu/ros1_Project/BuildingNav_ws/results/danger_truth.json",
-  "validation_report": "/home/liu/ros1_Project/BuildingNav_ws/generated_building/generation_checks.json",
-  "world_file": "/home/liu/ros1_Project/BuildingNav_ws/generated_building/competition_scene.world"
+  "seed": 1310291061,
+  "source_count": 7,
+  "truth_file": "/home/lab/rosProject/BuildingNav/results/danger_truth.json",
+  "validation_report": "/home/lab/rosProject/BuildingNav/generated_building/generation_checks.json",
+  "world_file": "/home/lab/rosProject/BuildingNav/generated_building/competition_scene.world"
 }

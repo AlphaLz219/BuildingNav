@@ -90,6 +90,24 @@ class FrontierExplorer:
         # 重规划前要求 /map 至少更新过一次（避免 SLAM 未就绪时反复重发）
         self._last_map_stamp = None
 
+        # ── 启动前初始化扫描 ──
+        # 前进距离（米），设为 0 则跳过前进
+        self.init_forward_distance = rospy.get_param('~init_forward_distance', 3.0)
+        # 前进速度（m/s）
+        self.init_forward_speed    = rospy.get_param('~init_forward_speed', 0.3)
+        # 是否在启动前旋转 360° 扫描
+        self.init_rotate_enabled   = rospy.get_param('~init_rotate_enabled', True)
+        # 调试模式：完成初始扫描后暂停，机器人原地待命，不进入探索循环
+        # 设为 True 后，需手动 kill 节点或置 False 重新启动
+        self.init_pause_enabled    = rospy.get_param('~init_pause_enabled', True)
+        # ── 走廊入口检测 ──
+        # 走廊宽度判定阈值（米），沿 y 轴扫描时宽度首次低于此值即视为进入走廊
+        self.corridor_width_thresh = rospy.get_param('~corridor_width_thresh', 3.0)
+        # 扫描步长（米），沿 y 轴向前扫描时的采样间隔
+        self.corridor_scan_step    = rospy.get_param('~corridor_scan_step', 0.25)
+        # 连续窄判定次数，连续 N 个点宽度 < 阈值才确认进入走廊
+        self.corridor_narrow_count = rospy.get_param('~corridor_narrow_count', 3)
+
     def _init_state(self):
         """初始化内部状态变量"""
         # 地图相关
@@ -598,28 +616,680 @@ class FrontierExplorer:
         self.last_stale_check_time = None
         rospy.loginfo("[前沿探索] 已取消当前导航目标")
 
+    def _navigate_to(self, x, y, timeout=60.0):
+        """
+        通过 move_base 定点导航到 (x,y)，等待到达或超时。
+
+        返回: True=到达, False=超时/失败
+        """
+        self.send_goal(x, y)
+        rospy.loginfo("[导航] 等待到达 (%.2f, %.2f) 最多 %.0fs ...", x, y, timeout)
+        deadline = rospy.Time.now() + rospy.Duration(timeout)
+        rate = rospy.Rate(5)
+        while not rospy.is_shutdown() and rospy.Time.now() < deadline:
+            state = self.ac.get_state()
+            if state == GoalStatus.SUCCEEDED:
+                rospy.loginfo("[导航] ✓ 已到达 (%.2f, %.2f)", x, y)
+                self.is_navigating = False
+                self.goal_start_time = None
+                self.current_goal_xy = None
+                return True
+            elif state in (GoalStatus.ABORTED, GoalStatus.REJECTED,
+                           GoalStatus.PREEMPTED, GoalStatus.LOST):
+                rospy.logwarn("[导航] ✗ 导航失败 (状态码: %d)", state)
+                self.is_navigating = False
+                self.goal_start_time = None
+                self.current_goal_xy = None
+                return False
+            rate.sleep()
+        rospy.logwarn("[导航] ⏰ 导航超时")
+        self.cancel_goal()
+        return False
+
     def _force_stop(self):
         """
-        强制停止机器人并等待 move_base 进入终态。
+        平滑停车：逐步减速并等待 move_base 进入终态。
 
-        cancel_goal() 只是发请求，move_base 可能仍在执行恢复行为
-        （如 rotate_recovery 旋转 360°）或 DWA 的残余速度指令。
-        此方法直接发布零速度并等待 move_base 状态变为终态。
+        时序保证：
+          1. cancel_goal() 先通知 move_base 停止控制（已在外部调用）
+          2. 等待 100ms 让 cancel 传播，避免与 move_base 的命令冲突
+          3. 逐步减速发布零速度
+          4. 同时等待 move_base 进入终态（最多 3 秒）
         """
-        stop = Twist()
-        for _ in range(5):
-            self.cmd_vel_pub.publish(stop)
-            rospy.sleep(0.05)
+        rospy.sleep(0.1)  # 等 cancel 传播
 
-        deadline = rospy.Time.now() + rospy.Duration(2.0)
+        # 逐步减速（8 步 × 100ms = 0.8s）
+        decel_steps = [0.15, 0.10, 0.06, 0.04, 0.02, 0.01, 0.005, 0.0]
+        deadline = rospy.Time.now() + rospy.Duration(3.0)
+        step_idx = 0
+
         while rospy.Time.now() < deadline:
+            # 发布当前减速步的速度
+            if step_idx < len(decel_steps):
+                cmd = Twist()
+                cmd.linear.x = decel_steps[step_idx]
+                self.cmd_vel_pub.publish(cmd)
+                step_idx += 1
+
+            # 检查 move_base 是否已进入终态
             state = self.ac.get_state()
             if state in (GoalStatus.SUCCEEDED, GoalStatus.ABORTED,
                          GoalStatus.REJECTED, GoalStatus.LOST):
                 break
             rospy.sleep(0.1)
-        # 最后再发一次确保停稳
-        self.cmd_vel_pub.publish(stop)
+
+        # 最终零速度确保停稳
+        self.cmd_vel_pub.publish(Twist())
+
+    def _rotate_360(self, angular_vel=0.8):
+        """
+        到达目标后原地旋转 360° 扫描周围环境。
+
+        move_base 导航成功时已自动停稳，直接发布旋转指令即可。
+        SLAM Toolbox 在旋转过程中会持续更新地图。
+
+        参数:
+            angular_vel: 旋转角速度 (rad/s)，默认 0.5，约 12.6s 完成一圈
+        """
+        rotation_time = 2.0 * np.pi / abs(angular_vel)
+        rospy.loginfo(
+            "[前沿探索] 🔄 到达目标，旋转扫描 360° (%.1fs)", rotation_time)
+
+        cmd = Twist()
+        cmd.angular.z = angular_vel
+
+        start = rospy.Time.now()
+        rate = rospy.Rate(20)
+        while (rospy.Time.now() - start).to_sec() < rotation_time:
+            self.cmd_vel_pub.publish(cmd)
+            rate.sleep()
+
+        # 停止旋转
+        self.cmd_vel_pub.publish(Twist())
+        rospy.sleep(0.3)  # 等待停稳 + SLAM 最后一次更新
+        rospy.loginfo("[前沿探索] ✓ 旋转扫描完成")
+
+    # ────────────── 直线前进 ──────────────
+    def _move_forward(self, distance, speed=0.15):
+        """
+        机器人直线前进指定距离（开环控制，基于时间估算）。
+
+        参数:
+            distance: 前进距离（米）
+            speed:    前进速度（m/s），默认 0.15
+        """
+        duration = distance / abs(speed)
+        rospy.loginfo("[前沿探索] ➡ 前进 %.2fm (速度 %.2fm/s, 预计 %.1fs)",
+                      distance, speed, duration)
+
+        cmd = Twist()
+        cmd.linear.x = speed
+
+        start = rospy.Time.now()
+        rate = rospy.Rate(20)
+        while (rospy.Time.now() - start).to_sec() < duration:
+            self.cmd_vel_pub.publish(cmd)
+            rate.sleep()
+
+        # 停止并等待停稳
+        self.cmd_vel_pub.publish(Twist())
+        rospy.sleep(0.3)
+        rospy.loginfo("[前沿探索] ✓ 前进完成")
+
+    # ────────────── 走廊入口检测 ──────────────
+    def _detect_corridor_entrance(self):
+        """
+        沿机器人朝向（+y）扫描地图，检测走廊入口位置。
+
+        原理：
+          - 建筑关于 x=0 对称，走廊中心在 x=0
+          - 大厅宽度 ~20m，走廊宽度 ~1.6-2.2m
+          - 沿 y 轴向前步进，在每个采样点测横向自由空间宽度
+          - 宽度从 >10m 骤降到 <3m 的转折点即为走廊入口
+
+        返回:
+          (entrance_x, entrance_y) 世界坐标，或 (None, None)
+        """
+        if self.map_data is None:
+            rospy.logwarn("[走廊检测] 地图未就绪")
+            return None, None
+
+        robot_x, robot_y, robot_yaw = self._get_robot_pose()
+        if robot_x is None:
+            rospy.logwarn("[走廊检测] 无法获取机器人位姿")
+            return None, None
+
+        res = self.map_resolution
+        h, w = self.map_data.shape
+        max_scan_y = robot_y + 20.0  # 最远向前扫描 20m
+
+        rospy.loginfo("[走廊检测] 从机器人位置 (%.2f, %.2f) 开始向前扫描",
+                      robot_x, robot_y)
+
+        narrow_streak = 0  # 连续窄判定计数器
+        entrance_y = None
+        width_profile = []  # 记录宽度剖面用于日志
+
+        scan_y = robot_y + 0.5  # 从机器人前方 0.5m 开始
+        while scan_y <= max_scan_y:
+            # 世界坐标 → 栅格坐标
+            col = int((robot_x - self.map_origin_x) / res)
+            row = int((scan_y - self.map_origin_y) / res)
+
+            if row < 0 or row >= h:
+                break
+
+            # ── 向 -x 方向扫描直到碰墙 ──
+            left_dist = 0
+            for dc in range(1, int(15.0 / res)):  # 最多 15m
+                lc = col - dc
+                if lc < 0 or lc >= w:
+                    break
+                val = self.map_data[row, lc]
+                if val == 100:   # 碰到障碍物（墙壁）
+                    left_dist = dc * res
+                    break
+                if val == -1:    # 未知区域也停止
+                    left_dist = dc * res
+                    break
+                if dc == int(15.0 / res) - 1:  # 到头也没碰墙
+                    left_dist = dc * res
+
+            # ── 向 +x 方向扫描直到碰墙 ──
+            right_dist = 0
+            for dc in range(1, int(15.0 / res)):
+                rc = col + dc
+                if rc < 0 or rc >= w:
+                    break
+                val = self.map_data[row, rc]
+                if val == 100:
+                    right_dist = dc * res
+                    break
+                if val == -1:
+                    right_dist = dc * res
+                    break
+                if dc == int(15.0 / res) - 1:
+                    right_dist = dc * res
+
+            total_width = left_dist + right_dist
+            width_profile.append((scan_y, total_width))
+
+            rospy.loginfo("[走廊检测]   y=%.2f  宽度=%.2fm (L=%.2f R=%.2f)",
+                          scan_y, total_width, left_dist, right_dist)
+
+            # ── 判定：宽度低于阈值则累积窄计数 ──
+            if total_width < self.corridor_width_thresh:
+                narrow_streak += 1
+                if narrow_streak >= self.corridor_narrow_count and entrance_y is None:
+                    # 首次确认：回退到第一次变窄的位置
+                    entrance_y = (
+                        width_profile[-self.corridor_narrow_count][0]
+                        if len(width_profile) >= self.corridor_narrow_count
+                        else scan_y
+                    )
+                    rospy.loginfo(
+                        "[走廊检测] ✓ 检测到走廊入口: (%.2f, %.2f) "
+                        "连续 %d 点宽度 < %.1fm",
+                        robot_x, entrance_y,
+                        self.corridor_narrow_count,
+                        self.corridor_width_thresh)
+                    break
+            else:
+                narrow_streak = 0  # 宽度回升，重置计数器
+
+            scan_y += self.corridor_scan_step
+
+        if entrance_y is None:
+            rospy.loginfo(
+                "[走廊检测] 未检测到走廊入口（扫描到 y=%.2f），"
+                "可能地图覆盖不足或场景为开阔区域", scan_y)
+            return None, None
+
+        # ── 发布走廊入口标记到 RViz ──
+        self._publish_entrance_marker(robot_x, entrance_y)
+        return robot_x, entrance_y
+
+    def _publish_entrance_marker(self, x, y):
+        """发布走廊入口的柱状标记到 RViz（黄色）"""
+        m = Marker()
+        m.header.frame_id = 'map'
+        m.header.stamp = rospy.Time.now()
+        m.ns = 'corridor_entrance'
+        m.id = 0
+        m.type = Marker.CYLINDER
+        m.action = Marker.ADD
+        m.pose.position = Point(x=x, y=y, z=0.5)
+        m.pose.orientation.w = 1.0
+        m.scale.x = 0.3
+        m.scale.y = 0.3
+        m.scale.z = 1.0
+        m.color = ColorRGBA(r=1.0, g=0.85, b=0.0, a=0.9)
+        m.lifetime = rospy.Duration(0)
+        self.goal_marker_pub.publish(m)
+
+    # ────────────── 高度剖面构建（内部工具） ──────────────
+    def _build_height_profile(self, y_start, dy_sign, max_dist_m):
+        """
+        沿 x 轴扫描，在每列从 y_start 沿 dy_sign 方向累计高度直到碰墙(100)。
+
+        返回: [(x, height_m), ...]
+        """
+        res = self.map_resolution
+        h, w = self.map_data.shape
+        y_row = int((y_start - self.map_origin_y) / res)
+        profile = []
+
+        x = -10.0
+        while x <= 10.0:
+            col = int((x - self.map_origin_x) / res)
+            if col < 0 or col >= w:
+                x += 0.2
+                continue
+            if y_row < 0 or y_row >= h:
+                x += 0.2
+                continue
+            if self.map_data[y_row, col] == -1:  # 起始点未知，跳过
+                x += 0.2
+                continue
+
+            cnt = 0
+            for d in range(int(max_dist_m / res)):
+                r = y_row + dy_sign * d
+                if r < 0 or r >= h:
+                    break
+                if self.map_data[r, col] == 100:
+                    break
+                cnt += 1
+            profile.append((x, cnt * res))
+            x += 0.2
+
+        return profile
+
+    # ────────────── 楼梯/电梯检测 ──────────────
+    def _detect_stair_and_elevator(self, entrance_y):
+        """
+        综合分析向上和向下两个自由高度剖面，定位楼梯和电梯中心。
+
+        策略：
+          - 楼梯在 x<0：找"低平台"两侧的跳变 → 左墙和右墙
+          - 电梯在 x>0：同上
+          - 两次扫描互相验证，取平均 x
+          - y = entrance_y * 比例（楼梯 ~0.5，电梯 ~0.35）
+        """
+        # ── 获取两个剖面 ──
+        prof_up = self._build_height_profile(0.5, 1, 15.0)
+        prof_down = self._build_height_profile(entrance_y - 0.3, -1, entrance_y - 0.5)
+
+        def _find_jumps(profile, x_sign, jump_thresh=3.0):
+            """在 profile 中找 x_sign 侧的大跳变。返回 [(x_before, x_after, jump_m, direction), ...]"""
+            jumps = []
+            for i in range(1, len(profile)):
+                px, ph = profile[i - 1]
+                cx, ch = profile[i]
+                if x_sign == -1 and cx > 0:
+                    break
+                if x_sign == 1 and px < 0:
+                    continue
+                delta = ch - ph
+                if abs(delta) > jump_thresh:
+                    jumps.append((px, cx, delta, 'up' if delta > 0 else 'down'))
+            return jumps
+
+        def _get_wall_pair(jumps):
+            """从跳变列表中找墙壁对，用平台宽度（1.5~6m）过滤噪声。"""
+            if not jumps:
+                return None, None
+            best_left = None
+            best_right = None
+            wall_left = None
+            for jx_before, jx_after, delta, direction in jumps:
+                if direction == 'down':
+                    wall_left = (jx_before + jx_after) / 2.0
+                elif direction == 'up' and wall_left is not None:
+                    wall_right = (jx_before + jx_after) / 2.0
+                    platform_width = wall_right - wall_left
+                    if 1.5 < platform_width < 6.0:
+                        best_left = wall_left
+                        best_right = wall_right
+            return best_left, best_right
+
+        # ── 分析向上扫 ──
+        jumps_up_left = _find_jumps(prof_up, -1)
+        jumps_up_right = _find_jumps(prof_up, 1)
+
+        stair_L_up, stair_R_up = _get_wall_pair(jumps_up_left)
+        elev_L_up, elev_R_up = _get_wall_pair(jumps_up_right)
+
+        rospy.loginfo("[楼梯检测] 向上扫: stair_L=%.2f stair_R=%.2f elev_L=%.2f elev_R=%.2f",
+                      stair_L_up or -1, stair_R_up or -1, elev_L_up or -1, elev_R_up or -1)
+
+        # ── 分析向下扫 ──
+        jumps_down_left = _find_jumps(prof_down, -1)
+        jumps_down_right = _find_jumps(prof_down, 1)
+
+        stair_L_down, stair_R_down = _get_wall_pair(jumps_down_left)
+        elev_L_down, elev_R_down = _get_wall_pair(jumps_down_right)
+
+        rospy.loginfo("[楼梯检测] 向下扫: stair_L=%.2f stair_R=%.2f elev_L=%.2f elev_R=%.2f",
+                      stair_L_down or -1, stair_R_down or -1,
+                      elev_L_down or -1, elev_R_down or -1)
+
+        # ── 融合：取两个剖面中有效的墙，求平均 ──
+        def _avg(*vals):
+            v = [v for v in vals if v is not None]
+            return sum(v) / len(v) if v else None
+
+        stair_L = _avg(stair_L_up, stair_L_down)
+        stair_R = _avg(stair_R_up, stair_R_down)
+        elev_L = _avg(elev_L_up, elev_L_down)
+        elev_R = _avg(elev_R_up, elev_R_down)
+
+        # ── 计算中心 ──
+        if stair_L is not None and stair_R is not None:
+            sx = (stair_L + stair_R) / 2.0
+            sy = entrance_y * 0.5
+            rospy.loginfo("[楼梯检测] ★★★ 楼梯中心: (%.2f, %.2f) ★★★", sx, sy)
+            self._publish_block_marker(sx, sy, 'stairs',
+                                       ColorRGBA(r=0.2, g=0.4, b=1.0, a=0.7))
+        else:
+            rospy.loginfo("[楼梯检测] 未检测到完整楼梯墙壁")
+
+        if elev_L is not None and elev_R is not None:
+            ex = (elev_L + elev_R) / 2.0
+            ey = entrance_y * 0.35
+            rospy.loginfo("[楼梯检测] ★★★ 电梯中心: (%.2f, %.2f) ★★★", ex, ey)
+            self._publish_block_marker(ex, ey, 'elevator',
+                                       ColorRGBA(r=0.2, g=0.9, b=0.3, a=0.7))
+        else:
+            rospy.loginfo("[楼梯检测] 未检测到完整电梯墙壁")
+
+    def _publish_block_marker(self, x, y, ns, color):
+        """发布彩色方块标记到 RViz，覆盖检测到的位置"""
+        m = Marker()
+        m.header.frame_id = 'map'
+        m.header.stamp = rospy.Time.now()
+        m.ns = ns
+        m.id = 0
+        m.type = Marker.CUBE
+        m.action = Marker.ADD
+        m.pose.position = Point(x=x, y=y, z=0.5)
+        m.pose.orientation.w = 1.0
+        m.scale.x = 0.8
+        m.scale.y = 0.8
+        m.scale.z = 1.0
+        m.color = color
+        m.lifetime = rospy.Duration(0)
+        self.goal_marker_pub.publish(m)
+
+    # ────────────── 自由高度扫描 (测试用) ──────────────
+    def _scan_free_height(self, entrance_y=None):
+        """
+        扫描 x 轴自由高度剖面。调用两次：
+          - 第一次：从 y=0.5 向上扫 → 拿到面朝大厅的墙壁（楼梯右墙、电梯左墙）
+          - 第二次：从入口 y 向下扫 → 拿到背面的墙壁（楼梯左墙、电梯右墙）
+        """
+        if self.map_data is None:
+            return
+
+        res = self.map_resolution
+        h, w = self.map_data.shape
+
+        # 调试：打印地图边界信息
+        map_y_min = self.map_origin_y
+        map_y_max = self.map_origin_y + h * res
+        map_x_min = self.map_origin_x
+        map_x_max = self.map_origin_x + w * res
+        rospy.loginfo(
+            "[自由高度] 地图范围: x[%.2f, %.2f] y[%.2f, %.2f] "
+            "size=%dx%d res=%.3f",
+            map_x_min, map_x_max, map_y_min, map_y_max, w, h, res)
+
+        # 世界 y=0.5 对应的栅格行（避开门口可能的噪声）
+        y_start = 0.5
+        y_start_row = int((y_start - self.map_origin_y) / res)
+        rospy.loginfo("[自由高度] 世界 y=%.2f 对应栅格行号: %d / %d",
+                      y_start, y_start_row, h)
+
+        # 扫描范围：x 从 -10m 到 +10m，步进 0.2m
+        x_start = -10.0
+        x_end = 10.0
+        x_step = 0.2
+        max_scan_y = 15.0  # 最远向上扫 15m
+
+        rospy.loginfo(
+            "[自由高度] ====== x 轴自由高度剖面 (从 y=%.2f 向上) ======",
+            y_start)
+
+        profile = []
+        x = x_start
+        while x <= x_end:
+            col = int((x - self.map_origin_x) / res)
+            if col < 0 or col >= w:
+                x += x_step
+                continue
+
+            # 起始点检查：如果是未知空间，该列跳过（LiDAR 未覆盖）
+            if y_start_row < 0 or y_start_row >= h:
+                x += x_step
+                continue
+            start_val = self.map_data[y_start_row, col]
+            if start_val == -1:  # 未知，跳过
+                x += x_step
+                continue
+
+            # 从 y_start 向上扫描：障碍物(100)停止，自由(0)和未知(-1)均计数
+            free_count = 0
+            for dy in range(int(max_scan_y / res)):
+                row = y_start_row + dy
+                if row < 0 or row >= h:
+                    break
+                val = self.map_data[row, col]
+                if val == 100:   # 障碍物 → 停止
+                    break
+                free_count += 1  # 自由(0) 或 未知(-1) 都算高度
+
+            free_height = free_count * res
+            profile.append((x, free_height))
+
+            # 检测附近的跳变（与左边相邻比较）
+            if len(profile) >= 2:
+                prev_h = profile[-2][1]
+                curr_h = free_height
+                jump = curr_h - prev_h
+                if abs(jump) > 1.5:  # 跳变 > 1.5m 标记
+                    direction = "↗ 变高" if jump > 0 else "↘ 变低"
+                    rospy.loginfo(
+                        "[自由高度] x=%.2f 高度=%.2fm  ← %s (Δ=%.2fm) ★",
+                        x, free_height, direction, jump)
+                else:
+                    rospy.loginfo(
+                        "[自由高度] x=%.2f 高度=%.2fm", x, free_height)
+            else:
+                rospy.loginfo(
+                    "[自由高度] x=%.2f 高度=%.2fm", x, free_height)
+
+            x += x_step
+
+        # ── 汇总 ──
+        rospy.loginfo("[自由高度] ====== 跳变点汇总 (向上扫) ======")
+        for i in range(1, len(profile)):
+            prev_x, prev_h = profile[i - 1]
+            curr_x, curr_h = profile[i]
+            jump = curr_h - prev_h
+            if abs(jump) > 1.5:
+                direction = "↑ 变高" if jump > 0 else "↓ 变低"
+                rospy.loginfo(
+                    "[自由高度] ★ x=%.2f → x=%.2f  %s: "
+                    "%.2fm → %.2fm (Δ=%.2fm)",
+                    prev_x, curr_x, direction, prev_h, curr_h, jump)
+
+        # ═══════════════════════════════════════════════════
+        #  向下扫描：从走廊入口向下看楼梯/电梯背面
+        # ═══════════════════════════════════════════════════
+        if entrance_y is None:
+            return
+
+        y_down = entrance_y - 0.3              # 入口稍微下一点开始
+        y_down_row = int((y_down - self.map_origin_y) / res)
+        min_scan_y = 0.5                       # 最远向下扫到 y=0.5
+
+        if y_down_row < 0 or y_down_row >= h:
+            rospy.logwarn("[自由高度] 入口 y=%.2f 超出地图范围，跳过向下扫", y_down)
+            return
+
+        rospy.loginfo(
+            "[自由高度] ====== x 轴自由高度剖面 (从 y=%.2f 向下) ======",
+            y_down)
+
+        profile = []
+        x = x_start
+        while x <= x_end:
+            col = int((x - self.map_origin_x) / res)
+            if col < 0 or col >= w:
+                x += x_step
+                continue
+
+            # 起始点未知则跳过
+            if self.map_data[y_down_row, col] == -1:
+                x += x_step
+                continue
+
+            free_count = 0
+            for dy in range(int((y_down - min_scan_y) / res)):
+                row = y_down_row - dy  # 向下
+                if row < 0 or row >= h:
+                    break
+                val = self.map_data[row, col]
+                if val == 100:
+                    break
+                free_count += 1
+
+            free_height = free_count * res
+            profile.append((x, free_height))
+
+            if len(profile) >= 2:
+                prev_h = profile[-2][1]
+                curr_h = free_height
+                jump = curr_h - prev_h
+                if abs(jump) > 1.5:
+                    direction = "↗ 变深" if jump > 0 else "↘ 变浅"
+                    rospy.loginfo(
+                        "[自由高度↓] x=%.2f 深度=%.2fm  ← %s (Δ=%.2fm) ★",
+                        x, free_height, direction, jump)
+                else:
+                    rospy.loginfo(
+                        "[自由高度↓] x=%.2f 深度=%.2fm", x, free_height)
+            else:
+                rospy.loginfo(
+                    "[自由高度↓] x=%.2f 深度=%.2fm", x, free_height)
+
+            x += x_step
+
+        # ── 汇总 ──
+        rospy.loginfo("[自由高度↓] ====== 跳变点汇总 (向下扫) ======")
+        for i in range(1, len(profile)):
+            prev_x, prev_h = profile[i - 1]
+            curr_x, curr_h = profile[i]
+            jump = curr_h - prev_h
+            if abs(jump) > 1.5:
+                direction = "↑ 变深" if jump > 0 else "↓ 变浅"
+                rospy.loginfo(
+                    "[自由高度↓] ★ x=%.2f → x=%.2f  %s: "
+                    "%.2fm → %.2fm (Δ=%.2fm)",
+                    prev_x, curr_x, direction, prev_h, curr_h, jump)
+
+    # ────────────── 启动前初始化扫描 ──────────────
+    def _initial_scan(self):
+        """
+        启动前沿探索前的初始化扫描流程：
+          1. 原地旋转 360°（出生点周围）
+          2. 前进一段距离（推开视野）
+          3. 原地旋转 360°（扫描深处）
+          4. 检测走廊入口，前进到入口前 0.5m
+          5. 再次旋转 360°（近距离扫描走廊入口区域）
+
+        各步骤的行为由 ROS 参数控制，可在运行时或 launch 文件中调节。
+        """
+        rospy.loginfo("[前沿探索] 等待首帧地图...")
+        while not rospy.is_shutdown() and self.map_data is None:
+            rospy.sleep(0.1)
+        if rospy.is_shutdown():
+            return
+
+        # ── 第一阶段：出生点旋转扫描 ──
+        if self.init_rotate_enabled:
+            rospy.loginfo("[前沿探索] 🔄 第一阶段：出生点旋转扫描...")
+            self._rotate_360()
+
+        # ── 第二阶段：前进 ──
+        if self.init_forward_distance > 0:
+            rospy.loginfo("[前沿探索] 🔄 第二阶段：前进 %.2fm...",
+                          self.init_forward_distance)
+            self._move_forward(self.init_forward_distance,
+                               self.init_forward_speed)
+
+        # ── 第三阶段：深入区域旋转扫描 ──
+        if self.init_rotate_enabled:
+            rospy.loginfo("[前沿探索] 🔄 第三阶段：深入后旋转扫描...")
+            self._rotate_360()
+
+        # ── 第四阶段：检测走廊入口 → 定点导航到入口前 → 再扫描 ──
+        rospy.loginfo("[前沿探索] 🔍 检测走廊入口...")
+        entrance_x, entrance_y = self._detect_corridor_entrance()
+        if entrance_y is not None:
+            rospy.loginfo(
+                "[走廊检测] ★ 走廊入口坐标: (%.2f, %.2f)",
+                entrance_x, entrance_y)
+            target_y = entrance_y - 0.5
+            rx, ry, _ = self._get_robot_pose()
+            if rx is not None:
+                dist = target_y - ry
+                if dist > 0.3:
+                    rospy.loginfo(
+                        "[前沿探索] 🔄 第四阶段：move_base 导航到 "
+                        "(%.2f, %.2f)...", entrance_x, target_y)
+                    if self._navigate_to(entrance_x, target_y, timeout=40.0):
+                        if self.init_rotate_enabled:
+                            rospy.loginfo(
+                                "[前沿探索] 🔄 第四阶段：入口前旋转扫描...")
+                            self._rotate_360()
+                        # 重新检测（更精确）
+                        entrance_x, entrance_y = (
+                            self._detect_corridor_entrance())
+                        if entrance_y is not None:
+                            rospy.loginfo(
+                                "[走廊检测] ★ 走廊入口(精): (%.2f, %.2f)",
+                                entrance_x, entrance_y)
+                    else:
+                        rospy.logwarn(
+                            "[前沿探索] 导航到入口前失败，"
+                            "继续在当前位姿执行后续检测")
+                else:
+                    rospy.loginfo(
+                        "[前沿探索] 已在走廊入口附近 (距 %.2fm)，跳过导航",
+                        dist)
+        else:
+            rospy.loginfo("[走廊检测] 未检测到走廊入口，跳过第四阶段")
+
+        # ── 自由高度扫描：近距离地图覆盖更完整 ──
+        rospy.loginfo("[前沿探索] 🔍 自由高度扫描（上+下）...")
+        self._scan_free_height(entrance_y)
+
+        # ── 楼梯/电梯检测 ──
+        if entrance_y is not None:
+            rospy.loginfo("[前沿探索] 🔍 检测楼梯和电梯...")
+            self._detect_stair_and_elevator(entrance_y)
+
+        # ── 调试暂停：完成初始扫描后原地待命，不进入探索循环 ──
+        if self.init_pause_enabled:
+            rospy.loginfo("[前沿探索] ⏸ 调试暂停已启用，机器人原地待命。"
+                          "按 Ctrl+C 退出或 kill 该节点。")
+            while not rospy.is_shutdown():
+                self.cmd_vel_pub.publish(Twist())
+                rospy.sleep(0.5)
+            return  # 节点被关闭，直接返回
+
+        rospy.loginfo("[前沿探索] ✓ 初始扫描完成，开始前沿探索")
 
     # ────────────── 周期性重规划（建图期）──────────────
     def _maybe_replan(self):
@@ -817,6 +1487,9 @@ class FrontierExplorer:
         rospy.loginfo("[前沿探索] ====== 开始自主探索（%.1f Hz）======",
                       self.detection_freq)
 
+        # ── 启动前初始化扫描（前进 + 旋转），建立初始地图 ──
+        self._initial_scan()
+
         while not rospy.is_shutdown():
             # ── 探索完成 ──
             if self.exploration_complete:
@@ -835,22 +1508,25 @@ class FrontierExplorer:
 
                 # ── 周期性重规划 + 目标过时检测 ──
                 # 仅在导航仍活跃（PENDING/ACTIVE）时触发，避免与成功/失败分支冲突
-                if state in (GoalStatus.PENDING, GoalStatus.ACTIVE):
-                    self._maybe_replan()
-                    # 独立计时器的过时检查（比重规划更频繁）
-                    if self._check_stale_goal():
-                        rate.sleep()
-                        continue
+                # if state in (GoalStatus.PENDING, GoalStatus.ACTIVE):
+                #     self._maybe_replan()
+                #     # 独立计时器的过时检查（比重规划更频繁）
+                #     if self._check_stale_goal():
+                #         rate.sleep()
+                #         continue
 
                 # 导航成功
                 if state == GoalStatus.SUCCEEDED:
-                    rospy.loginfo("[前沿探索] ✓ 导航成功，继续检测前沿")
+                    rospy.loginfo("[前沿探索] ✓ 导航成功")
+                    # 到达目标后旋转 360° 扫描环境，SLAM 会更新地图
+                    self._rotate_360()
                     self.is_navigating = False
                     self.goal_start_time = None
                     self.goal_gain = None
                     self.last_stale_check_time = None
                     self.no_frontier_count = 0  # 重置计数
                     self._clear_goal_marker()
+                    rospy.loginfo("[前沿探索] 继续检测前沿")
 
                 # 导航失败（中止/拒绝/抢占）
                 elif state in (GoalStatus.ABORTED, GoalStatus.REJECTED,

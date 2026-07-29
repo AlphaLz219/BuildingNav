@@ -132,7 +132,7 @@ Visualization Manager:
       Unreliable: false
       Use Timestamp: false
       Value: true
-    - Alpha: 0.6000000238418579
+    - Alpha: 1
       Class: rviz/Map
       Color Scheme: costmap
       Draw Behind: false
@@ -334,7 +334,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 11.276594161987305
+      Distance: 11.279411315917969
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -342,9 +342,9 @@ Visualization Manager:
         Value: false
       Field of View: 0.7853981852531433
       Focal Point:
-        X: 0.2917060852050781
-        Y: 7.294222831726074
-        Z: -0.46058547496795654
+        X: -1.366634488105774
+        Y: 7.210418224334717
+        Z: -0.4589279294013977
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
@@ -370,5 +370,5 @@ Window Geometry:
   Views:
     collapsed: false
   Width: 1379
-  X: 45
-  Y: -2
+  X: -9
+  Y: 8
