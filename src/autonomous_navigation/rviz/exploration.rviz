@@ -189,7 +189,15 @@ Visualization Manager:
       Marker Topic: /frontier_markers
       Name: Frontier Markers
       Namespaces:
-        frontiers: true
+        {}
+      Queue Size: 100
+      Value: true
+    - Class: rviz/MarkerArray
+      Enabled: true
+      Marker Topic: /forbidden_zone_markers
+      Name: MarkerArray
+      Namespaces:
+        forbidden_zones: true
       Queue Size: 100
       Value: true
     - Class: rviz/Marker
@@ -197,7 +205,9 @@ Visualization Manager:
       Marker Topic: /current_goal_marker
       Name: Current Goal
       Namespaces:
-        current_goal: true
+        corridor_entrance: true
+        elevator: true
+        stairs: true
       Queue Size: 10
       Value: true
     - Alpha: 1
@@ -304,7 +314,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 13.004304885864258
+      Distance: 12.437417030334473
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -312,9 +322,9 @@ Visualization Manager:
         Value: false
       Field of View: 0.7853981852531433
       Focal Point:
-        X: -0.7498018741607666
-        Y: 7.069645881652832
-        Z: -0.05886070057749748
+        X: -0.3604013919830322
+        Y: 7.261099338531494
+        Z: -0.059254541993141174
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
@@ -322,7 +332,7 @@ Visualization Manager:
       Near Clip Distance: 0.009999999776482582
       Pitch: 1.5697963237762451
       Target Frame: <Fixed Frame>
-      Yaw: 6.268187999725342
+      Yaw: 0.00500286091119051
     Saved: ~
 Window Geometry:
   Displays:
@@ -338,5 +348,5 @@ Window Geometry:
   Views:
     collapsed: false
   Width: 1440
-  X: 3
-  Y: 0
+  X: -29
+  Y: -32
