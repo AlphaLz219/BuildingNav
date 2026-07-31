@@ -3,8 +3,9 @@
   <!-- ======================== 参数 ======================== -->
   <arg name="world_file"   default="$(find autonomous_navigation)/../../generated_building/competition_scene.world"
                            doc="比赛场景世界文件"/>
-  <arg name="robot_x"      default="0.0"    doc="机器人出生点 X (m)"/>
-  <arg name="robot_y"      default="0.4"   doc="机器人出生点 Y (m)"/>
+      <!-- 机器人位姿: x=0.01 y=27.50 -->
+  <arg name="robot_x"      default="0.03"    doc="机器人出生点 X (m)"/> 
+  <arg name="robot_y"      default="34.21"   doc="机器人出生点 Y (m)"/>
   <arg name="robot_z"      default="0.0"    doc="机器人出生点 Z (m)"/>
   <arg name="robot_yaw"    default="1.5708" doc="机器人朝向 yaw (rad)，默认 π/2 面朝建筑入口"/>
   <arg name="gui"          default="true"/>
@@ -82,8 +83,9 @@
     <param name="base_frame"  value="base_footprint"/>
 
     <param name="mode"              value="mapping"/>
+    <param name="map_file_name"    value="/home/lab/rosProject/BuildingNav/maps/slam_map"/>
     <param name="map_start_pose"    value="[0.0, 0.5, 0.0]"/>
-    <param name="map_start_at_dock" value="false"/>
+    <param name="map_start_at_dock" value="true"/>
 
     <param name="map_update_interval"      value="0.5"/>
     <param name="transform_publish_period" value="0.05"/>

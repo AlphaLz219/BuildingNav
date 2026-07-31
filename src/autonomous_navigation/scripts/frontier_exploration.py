@@ -20,6 +20,8 @@ import numpy as np
 import cv2
 import actionlib
 import tf
+import json
+import os
 
 from nav_msgs.msg import OccupancyGrid
 from nav_msgs.srv import GetPlan, GetPlanRequest
@@ -112,6 +114,10 @@ class FrontierExplorer:
         # 用于在房门扫描前让 LiDAR 覆盖更多走廊区域
         self.corridor_entry_depth = rospy.get_param('~corridor_entry_depth', 5.0)
 
+        # ── 状态持久化：保存/加载初始扫描结果 ──
+        self.save_state_path = rospy.get_param('~save_state_path', '')
+        self.load_state_path = rospy.get_param('~load_state_path', '')
+
     def _init_state(self):
         """初始化内部状态变量"""
         # 地图相关
@@ -139,6 +145,11 @@ class FrontierExplorer:
         self.last_stale_check_time = None  # 上次过时检查时刻
         self.forbidden_zones = []      # [(x_min, x_max, y_min, y_max), ...]
         self.door_positions = []       # [(door_x, door_y, side), ...] side='left'/'right'
+        self.stair_center = None       # (sx, sy) 楼梯中心
+        self.elevator_center = None    # (ex, ey) 电梯中心
+        # 持久化字段（从文件加载时填充）
+        self.saved_entrance_y = None
+        self.saved_corridor_end_y = None
 
     def _init_ros_interface(self):
         """初始化 ROS 接口：TF、ActionClient、发布器、订阅器"""
@@ -929,81 +940,102 @@ class FrontierExplorer:
     # ────────────── 走廊尽头检测 ──────────────
     def _detect_corridor_end(self, entrance_y):
         """
-        从机器人当前位置沿走廊中心线 (x=0) 向 +y 扫描，检测走廊尽头。
+        从机器人当前位置沿走廊中心线向 +y 扫描，三列同时检测尽头。
 
-        只做一个动作：沿 x=0 向前看，遇到什么？
-          - 碰 100（真实墙壁）且前方自由 < 0.5m → 尽头确认
-          - 碰 -1（未知区域）→ 地图未覆盖，需前进建图
-          - 全是 0（自由）→ 走廊还很长，但当前地图已覆盖到头
+        检测点: x=0（中心）, x=-0.5, x=+0.5（走廊宽度内）
+        只有三列同时在 <0.5m 内碰真墙(100)，才确认尽头，防止误判。
 
         返回: (end_y, definitive)
         """
         if self.map_data is None or entrance_y is None:
             return None, False
 
-        # 从机器人当前位置开始扫描（而非 entrance_y）
         rx, ry, _ = self._get_robot_pose()
         if ry is None:
             ry = entrance_y
 
         res = self.map_resolution
         h, w = self.map_data.shape
-        col_c = int((0.0 - self.map_origin_x) / res)
+        # 三列检测点，x 坐标均保证在走廊宽度内
+        check_xs = [0.0, -0.5, 0.5]
+        check_cols = [int((x - self.map_origin_x) / res) for x in check_xs]
         step = 0.25
-        scan_y = ry + 0.3       # 从机器人前方开始
-        max_scan = ry + 50.0    # 最多前扫 50m
+        scan_y = ry + 0.3
+        max_scan = ry + 50.0
 
-        rospy.loginfo("[尽头检测] ====== 从机器人 y=%.2f 沿 x=0 向前扫描 ======", ry)
+        rospy.loginfo("[尽头检测] ====== 从机器人 y=%.2f x=[%.1f,%.1f,%.1f] 向前扫描 ======",
+                      ry, check_xs[0], check_xs[1], check_xs[2])
 
         while scan_y <= max_scan:
             row = int((scan_y - self.map_origin_y) / res)
             if row < 0 or row >= h:
                 break
 
-            # 先看当前格：如果是未知，地图没覆盖到这里
-            cur = self.map_data[row, col_c]
-            if cur == -1:
-                rospy.loginfo("[尽头检测] y=%.2f 未覆盖 → 需前进建图", scan_y)
+            # ── 三列各自测前方自由延伸 ──
+            forward_dists = []
+            blockers = []
+            for col_c in check_cols:
+                if col_c < 0 or col_c >= w:
+                    forward_dists.append(0.0)
+                    blockers.append(-1)
+                    continue
+
+                cur = self.map_data[row, col_c]
+                if cur == -1:
+                    rospy.loginfo("[尽头检测] y=%.2f x=%.1f 未覆盖 → 需前进建图",
+                                  scan_y, check_xs[len(forward_dists)])
+                    return scan_y, False
+                if cur == 100:
+                    rospy.loginfo("[尽头检测] y=%.2f x=%.1f 直接碰墙",
+                                  scan_y, check_xs[len(forward_dists)])
+                    forward_dists.append(0.0)
+                    blockers.append(100)
+                    continue
+
+                fwd = 0
+                blk = 0
+                for dr in range(1, int(10.0 / res)):
+                    r_fwd = row + dr
+                    if r_fwd >= h:
+                        break
+                    v = self.map_data[r_fwd, col_c]
+                    if v == 100:
+                        blk = 100
+                        break
+                    if v == -1:
+                        blk = -1
+                        break
+                    fwd += 1
+                forward_dists.append(fwd * res)
+                blockers.append(blk)
+
+            min_fwd = min(forward_dists)
+            rospy.loginfo("[尽头检测] y=%.2f 前向=[%.2f,%.2f,%.2f]m min=%.2f",
+                          scan_y,
+                          forward_dists[0], forward_dists[1], forward_dists[2],
+                          min_fwd)
+
+            # ── 判定：三列中有任一列前方为未知 → 需前进 ──
+            if -1 in blockers:
+                for i, blk in enumerate(blockers):
+                    if blk == -1:
+                        rospy.loginfo("[尽头检测] ★ 前方未知: y=%.2f x=%.1f (需前进建图)",
+                                      scan_y, check_xs[i])
                 return scan_y, False
-            if cur == 100:
-                rospy.loginfo("[尽头检测] y=%.2f 直接碰墙 → 尽头", scan_y)
+
+            # ── 三列全部碰墙 <0.5m → 确认尽头 ──
+            if min_fwd < 0.5 and all(b == 100 for b in blockers):
+                rospy.loginfo("[尽头检测] ★★★ 三列全碰墙，尽头确认: y=%.2f ★★★",
+                              scan_y)
                 return scan_y, True
 
-            # 向前看连续自由格数
-            forward_cells = 0
-            blocker = 0
-            for dr in range(1, int(10.0 / res)):
-                r_fwd = row + dr
-                if r_fwd >= h:
-                    break
-                v = self.map_data[r_fwd, col_c]
-                if v == 100:
-                    blocker = 100
-                    break
-                if v == -1:
-                    blocker = -1
-                    break
-                forward_cells += 1
-            forward_dist = forward_cells * res
-
-            if forward_dist < 0.5:
-                if blocker == 100:
-                    rospy.loginfo("[尽头检测] ★ 真实尽头: y=%.2f (前方 %.2fm 碰墙)",
-                                  scan_y, forward_dist)
-                    return scan_y, True
-                elif blocker == -1:
-                    rospy.loginfo("[尽头检测] ★ 前方未知: y=%.2f (前方 %.2fm 后为未知)",
-                                  scan_y, forward_dist)
-                    return scan_y, False
-
-            # 前方还很开阔，但不用逐格全扫，跳一大步
-            # 如果前方自由 > 2m，直接跳到自由段的末尾继续
-            if forward_dist > 2.0:
-                scan_y += forward_dist - 0.5
+            # 跳步
+            if min_fwd > 2.0:
+                scan_y += min_fwd - 0.5
             else:
                 scan_y += step
 
-        rospy.loginfo("[尽头检测] 扫描 %dm 未发现尽头，视为未知",
+        rospy.loginfo("[尽头检测] 扫描 %dm 未发现尽头",
                       max_scan - ry)
         return scan_y, False
 
@@ -1036,6 +1068,7 @@ class FrontierExplorer:
         scan_y = entrance_y + 0.5
         step = 0.2
         door_thresh = 2.5
+        min_door_width = 0.6  # 门至少宽0.6m，过滤墙壁扫描噪声
 
         doors = []
         prev_left = None
@@ -1079,46 +1112,66 @@ class FrontierExplorer:
                 if dc == int(max_scan_dist / res) - 1:
                     right = dc * res
 
-            rospy.loginfo("[房门扫描] y=%.2f  L=%.2fm  R=%.2fm",
+            rospy.logdebug("[房门扫描] y=%.2f  L=%.2fm  R=%.2fm",
                           scan_y, left, right)
 
             # ── 左门检测 ──
             if left > door_thresh and not in_left_door:
                 in_left_door = True
                 left_door_start = scan_y
-                rospy.loginfo("[房门扫描]   左侧门开始 @ y=%.2f", scan_y)
+                rospy.logdebug("[房门扫描]   左侧门开始 @ y=%.2f", scan_y)
             elif left <= door_thresh and in_left_door:
                 in_left_door = False
+                span = scan_y - left_door_start
                 door_y = (left_door_start + scan_y) / 2.0
-                doors.append((door_y, 'left'))
-                rospy.loginfo("[房门扫描] ★ 左侧门: y=%.2f (宽 %.2fm)",
-                              door_y, scan_y - left_door_start)
+                if span >= min_door_width:
+                    doors.append((door_y, 'left'))
+                    rospy.loginfo("[房门扫描] ★ 左侧门: y=%.2f (宽 %.2fm)",
+                                  door_y, span)
+                else:
+                    rospy.logdebug("[房门扫描]   左侧门跳过(宽%.2fm < %.2fm 噪声)",
+                                  span, min_door_width)
 
             # ── 右门检测 ──
             if right > door_thresh and not in_right_door:
                 in_right_door = True
                 right_door_start = scan_y
-                rospy.loginfo("[房门扫描]   右侧门开始 @ y=%.2f", scan_y)
+                rospy.logdebug("[房门扫描]   右侧门开始 @ y=%.2f", scan_y)
             elif right <= door_thresh and in_right_door:
                 in_right_door = False
+                span = scan_y - right_door_start
                 door_y = (right_door_start + scan_y) / 2.0
-                doors.append((door_y, 'right'))
-                rospy.loginfo("[房门扫描] ★ 右侧门: y=%.2f (宽 %.2fm)",
-                              door_y, scan_y - right_door_start)
+                if span >= min_door_width:
+                    doors.append((door_y, 'right'))
+                    rospy.loginfo("[房门扫描] ★ 右侧门: y=%.2f (宽 %.2fm)",
+                                  door_y, span)
+                else:
+                    rospy.logdebug("[房门扫描]   右侧门跳过(宽%.2fm < %.2fm 噪声)",
+                                  span, min_door_width)
 
             prev_left = left
             prev_right = right
             scan_y += step
 
-        # 扫描结束还在门内 → 记录
+        # 扫描结束还在门内 → 宽度足够才记录
         if in_left_door and left_door_start is not None:
-            doors.append(((left_door_start + scan_y) / 2.0, 'left'))
-            rospy.loginfo("[房门扫描] ★ 左侧门(未闭合): y=%.2f",
-                          (left_door_start + scan_y) / 2.0)
+            span = scan_y - left_door_start
+            door_y = (left_door_start + scan_y) / 2.0
+            if span >= min_door_width:
+                doors.append((door_y, 'left'))
+                rospy.loginfo("[房门扫描] ★ 左侧门(未闭合): y=%.2f (宽 %.2fm)",
+                              door_y, span)
+            else:
+                rospy.logdebug("[房门扫描]   左侧门(未闭合)跳过(宽%.2fm 噪声)", span)
         if in_right_door and right_door_start is not None:
-            doors.append(((right_door_start + scan_y) / 2.0, 'right'))
-            rospy.loginfo("[房门扫描] ★ 右侧门(未闭合): y=%.2f",
-                          (right_door_start + scan_y) / 2.0)
+            span = scan_y - right_door_start
+            door_y = (right_door_start + scan_y) / 2.0
+            if span >= min_door_width:
+                doors.append((door_y, 'right'))
+                rospy.loginfo("[房门扫描] ★ 右侧门(未闭合): y=%.2f (宽 %.2fm)",
+                              door_y, span)
+            else:
+                rospy.logdebug("[房门扫描]   右侧门(未闭合)跳过(宽%.2fm 噪声)", span)
 
         rospy.loginfo("[房门扫描] ====== 共检测到 %d 扇门 ======", len(doors))
         return doors
@@ -1155,7 +1208,7 @@ class FrontierExplorer:
             marker_array.markers.append(m)
 
         self.marker_pub.publish(marker_array)
-        rospy.loginfo("[房门扫描] 📍 已发布 %d 个房门标记", len(doors))
+        rospy.logdebug("[房门扫描] 📍 已发布 %d 个房门标记", len(doors))
 
     # ────────────── 高度剖面构建（内部工具） ──────────────
     def _build_height_profile(self, y_start, dy_sign, max_dist_m):
@@ -1278,6 +1331,7 @@ class FrontierExplorer:
         if stair_L is not None and stair_R is not None:
             sx = (stair_L + stair_R) / 2.0
             sy = entrance_y * 0.5
+            self.stair_center = (sx, sy)
             rospy.loginfo("[楼梯检测] ★★★ 楼梯中心: (%.2f, %.2f) ★★★", sx, sy)
             self._publish_block_marker(sx, sy, 'stairs',
                                        ColorRGBA(r=0.2, g=0.4, b=1.0, a=0.7))
@@ -1287,6 +1341,7 @@ class FrontierExplorer:
         if elev_L is not None and elev_R is not None:
             ex = (elev_L + elev_R) / 2.0
             ey = entrance_y * 0.35
+            self.elevator_center = (ex, ey)
             rospy.loginfo("[楼梯检测] ★★★ 电梯中心: (%.2f, %.2f) ★★★", ex, ey)
             self._publish_block_marker(ex, ey, 'elevator',
                                        ColorRGBA(r=0.2, g=0.9, b=0.3, a=0.7))
@@ -1403,6 +1458,51 @@ class FrontierExplorer:
         m.color = color
         m.lifetime = rospy.Duration(0)
         self.goal_marker_pub.publish(m)
+
+    # ────────────── 状态持久化 ──────────────
+    def _save_state(self, entrance_y=None, corridor_end_y=None):
+        """保存走廊检测结果到 JSON 文件"""
+        if not self.save_state_path:
+            return
+        state = {
+            'entrance_y': entrance_y,
+            'corridor_end_y': corridor_end_y,
+            'door_positions': self.door_positions,
+            'forbidden_zones': self.forbidden_zones,
+            'stair_center': self.stair_center,
+            'elevator_center': self.elevator_center,
+        }
+        try:
+            with open(self.save_state_path, 'w') as f:
+                json.dump(state, f, indent=2)
+            rospy.loginfo("[状态] ✓ 已保存到 %s", self.save_state_path)
+            rospy.loginfo("[状态]   入口 y=%.2f  尽头 y=%.2f  门=%d  禁区=%d",
+                          entrance_y or -1, corridor_end_y or -1,
+                          len(self.door_positions), len(self.forbidden_zones))
+        except IOError as e:
+            rospy.logwarn("[状态] 保存失败: %s", e)
+
+    def _load_state(self):
+        """从 JSON 文件加载，成功返回 True"""
+        if not self.load_state_path or not os.path.exists(self.load_state_path):
+            return False
+        try:
+            with open(self.load_state_path, 'r') as f:
+                state = json.load(f)
+            self.saved_entrance_y = state.get('entrance_y')
+            self.saved_corridor_end_y = state.get('corridor_end_y')
+            self.door_positions = state.get('door_positions', [])
+            self.forbidden_zones = state.get('forbidden_zones', [])
+            self.stair_center = state.get('stair_center')
+            self.elevator_center = state.get('elevator_center')
+            rospy.loginfo("[状态] ✓ 已加载: 入口=%.2f 尽头=%.2f 门=%d 禁区=%d",
+                          self.saved_entrance_y or -1,
+                          self.saved_corridor_end_y or -1,
+                          len(self.door_positions), len(self.forbidden_zones))
+            return True
+        except (IOError, json.JSONDecodeError) as e:
+            rospy.logwarn("[状态] 加载失败: %s", e)
+            return False
 
     # ────────────── 自由高度扫描 (测试用) ──────────────
     def _scan_free_height(self, entrance_y=None):
@@ -1599,6 +1699,41 @@ class FrontierExplorer:
         if rospy.is_shutdown():
             return
 
+        # ── 从文件加载状态 → 跳过初始扫描 ──
+        if self._load_state():
+            rospy.loginfo("[前沿探索] ⏩ 跳过初始扫描，恢复已保存特征")
+            self._mark_forbidden_zones()
+            self._publish_forbidden_zone_markers()
+            if self.saved_entrance_y is not None:
+                self._publish_entrance_marker(0.0, self.saved_entrance_y)
+            if self.saved_corridor_end_y is not None:
+                self._publish_entrance_marker(0.0, self.saved_corridor_end_y)
+            if self.door_positions:
+                self._publish_door_markers(self.door_positions)
+            if self.stair_center:
+                sx, sy = self.stair_center
+                self._publish_block_marker(sx, sy, 'stairs',
+                                           ColorRGBA(r=0.2, g=0.4, b=1.0, a=0.7))
+            if self.elevator_center:
+                ex, ey = self.elevator_center
+                self._publish_block_marker(ex, ey, 'elevator',
+                                           ColorRGBA(r=0.2, g=0.9, b=0.3, a=0.7))
+            if self.init_pause_enabled:
+                rospy.loginfo("[前沿探索] ⏸ 调试暂停...")
+                rx, ry, _ = self._get_robot_pose()
+                if rx is not None:
+                    rospy.loginfo("[位置] ★ 当前机器人位姿: "
+                                  "x=%.2f y=%.2f", rx, ry)
+                while not rospy.is_shutdown():
+                    self.cmd_vel_pub.publish(Twist())
+                    rospy.sleep(0.5)
+                return
+            rx, ry, _ = self._get_robot_pose()
+            if rx is not None:
+                rospy.loginfo("[位置] ★ 当前机器人位姿: x=%.2f y=%.2f", rx, ry)
+            rospy.loginfo("[前沿探索] ✓ 特征恢复完成，开始前沿探索")
+            return
+
         # ── 第一阶段：出生点旋转扫描 ──
         if self.init_rotate_enabled:
             rospy.loginfo("[前沿探索] 🔄 第一阶段：出生点旋转扫描...")
@@ -1639,7 +1774,7 @@ class FrontierExplorer:
                         if self.init_rotate_enabled:
                             rospy.loginfo(
                                 "[前沿探索] 🔄 第四阶段：入口前旋转扫描...")
-                            # self._rotate_360()
+                            self._wiggle_scan()
                         # 重新检测（更精确）
                         old_entrance_x = entrance_x
                         old_entrance_y = entrance_y
@@ -1749,6 +1884,21 @@ class FrontierExplorer:
                     observe_y)
                 if self._navigate_to(0.0, observe_y, timeout=60.0):
                     self._wiggle_scan()
+                    # 复检尽头：从新位置再次确认尽头位置
+                    re_end_y, re_def = self._detect_corridor_end(entrance_y)
+                    if re_def and re_end_y is not None:
+                        delta = abs(re_end_y - corridor_end_y)
+                        if delta > 0.5:
+                            rospy.loginfo(
+                                "[尽头检测] 复检尽头偏差 %.2fm > 0.5m！"
+                                "更新为 y=%.2f", delta, re_end_y)
+                            corridor_end_y = re_end_y
+                            self._publish_entrance_marker(0.0, corridor_end_y)
+                        else:
+                            rospy.loginfo(
+                                "[尽头检测] 复检尽头一致 (偏差 %.2fm)", delta)
+                    else:
+                        rospy.loginfo("[尽头检测] 复检未确认尽头，保留原值")
                 else:
                     rospy.logwarn("[前沿探索] 回走导航失败，在当前位置扫门")
 
@@ -1767,6 +1917,16 @@ class FrontierExplorer:
                 self._publish_door_markers(doors)
             else:
                 rospy.loginfo("[房门扫描] 未检测到房门")
+
+        # ── 保存状态（如果配置了路径）──
+        self._save_state(
+            entrance_y=entrance_y,
+            corridor_end_y=corridor_end_y)
+
+        # ── 打印当前机器人位置（方便复制到 launch 文件）──
+        rx, ry, _ = self._get_robot_pose()
+        if rx is not None:
+            rospy.loginfo("[位置] ★ 当前机器人位姿: x=%.2f y=%.2f", rx, ry)
 
         # ── 调试暂停：完成初始扫描后原地待命，不进入探索循环 ──
         if self.init_pause_enabled:

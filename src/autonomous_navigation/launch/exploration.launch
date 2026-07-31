@@ -10,10 +10,14 @@
   </include>
 
   <!-- ============= 2. 前沿探索节点 ============= -->
+  <arg name="save_state_path" default=""/>
+  <arg name="load_state_path" default=""/>
   <node pkg="autonomous_navigation" type="frontier_exploration.py"
         name="frontier_exploration" output="screen">
     <rosparam file="$(find autonomous_navigation)/config/exploration_params.yaml"
               command="load"/>
+    <param name="save_state_path" value="$(arg save_state_path)"/>
+    <param name="load_state_path" value="$(arg load_state_path)"/>
   </node>
 
   <!-- ============= 3. 探索专用 RViz ============= -->
