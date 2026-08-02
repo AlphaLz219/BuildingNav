@@ -1,9 +1,9 @@
 // 启动机器人控制
-// source devel/setup.bash
-// rosrun turtlebot3_teleop turtlebot3_teleop_key _speed:=0.15 _turn:=1.0
-// roslaunch autonomous_navigation bringup_tb3_mid360_toolbox.launch
-// roslaunch autonomous_navigation navigation.launch
-// roslaunch autonomous_navigation exploration.launch
+source devel/setup.bash
+rosrun turtlebot3_teleop turtlebot3_teleop_key _speed:=0.15 _turn:=1.0
+roslaunch autonomous_navigation bringup_tb3_mid360_toolbox.launch
+roslaunch autonomous_navigation navigation.launch
+roslaunch autonomous_navigation exploration.launch
 
 
 // 调试
@@ -11,8 +11,7 @@
 roslaunch autonomous_navigation bringup_tb3_mid360_toolbox.launch
 
 # 2. 启动探索（带保存）
-roslaunch autonomous_navigation exploration.launch \
-    save_state_path:=/home/lab/rosProject/BuildingNav/maps/corridor_state.json
+roslaunch autonomous_navigation exploration.launch  save_state_path:=/home/lab/rosProject/BuildingNav/maps/corridor_state.json
 
 # 3. 流程跑完后，另开终端保存地图
 rosrun map_server map_saver -f ~/rosProject/BuildingNav/maps/corridor_map
