@@ -30,6 +30,8 @@ from actionlib_msgs.msg import GoalStatus
 from visualization_msgs.msg import Marker, MarkerArray
 from geometry_msgs.msg import Point, PoseStamped, Twist
 from std_msgs.msg import ColorRGBA
+from building_generator_interfaces.srv import CallElevator, SetDoorState
+from std_srvs.srv import Empty
 
 
 # ═══════════════════════════════════════════════════════════
@@ -118,6 +120,10 @@ class FrontierExplorer:
         self.save_state_path = rospy.get_param('~save_state_path', '')
         self.load_state_path = rospy.get_param('~load_state_path', '')
 
+        # ── 电梯调试模式 ──
+        self.debug_elevator = rospy.get_param('~debug_elevator', False)
+        self.target_floor = rospy.get_param('~target_floor', 1)
+
     def _init_state(self):
         """初始化内部状态变量"""
         # 地图相关
@@ -169,6 +175,19 @@ class FrontierExplorer:
         self._plan_service = rospy.ServiceProxy(
             '/move_base/make_plan', GetPlan)
         rospy.loginfo("[前沿探索] /move_base/make_plan 已连接")
+
+        # 电梯/门控制服务
+        rospy.loginfo("[前沿探索] 等待 /call_elevator 服务...")
+        rospy.wait_for_service('/call_elevator', timeout=5.0)
+        self._call_elevator_srv = rospy.ServiceProxy(
+            '/call_elevator', CallElevator)
+        rospy.loginfo("[前沿探索] /call_elevator 已连接")
+
+        rospy.loginfo("[前沿探索] 等待 /set_door_state 服务...")
+        rospy.wait_for_service('/set_door_state', timeout=5.0)
+        self._set_door_srv = rospy.ServiceProxy(
+            '/set_door_state', SetDoorState)
+        rospy.loginfo("[前沿探索] /set_door_state 已连接")
 
         # 发布器 —— 前沿标记可视化（MarkerArray）
         self.marker_pub = rospy.Publisher(
@@ -1601,6 +1620,255 @@ class FrontierExplorer:
         marker_array.markers.append(clear2)
         self.room_marker_pub.publish(marker_array)
 
+    # ────────────── 电梯控制 ──────────────
+    def _call_elevator(self, elevator_id, target_floor, open_doors=False):
+        """
+        呼叫电梯到指定楼层。
+
+        参数:
+            elevator_id: 电梯 ID（默认 'elevator_main'）
+            target_floor: 目标楼层（0-based）
+            open_doors: 是否开门
+
+        返回: True 成功, False 失败
+        """
+        try:
+            resp = self._call_elevator_srv(
+                elevator_id=elevator_id,
+                target_floor=target_floor,
+                open_doors=open_doors)
+            rospy.loginfo(
+                "[电梯] ✓ 呼叫到 %d 楼: accepted=%s, floor=%d, state=%s",
+                target_floor, resp.accepted, resp.current_floor, resp.state)
+            if not resp.accepted:
+                rospy.logwarn("[电梯] 呼叫被拒绝: %s", resp.message)
+            return resp.accepted
+        except rospy.ServiceException as e:
+            rospy.logwarn("[电梯] 服务调用失败: %s", e)
+            return False
+
+    def _set_door(self, door_id, open):
+        """
+        开关电梯厅门。
+
+        参数:
+            door_id: 门 ID（如 'elevator_floor_0'）
+            open: True 开门, False 关门
+
+        返回: True 成功, False 失败
+        """
+        action = "开门" if open else "关门"
+        try:
+            resp = self._set_door_srv(door_id=door_id, open=open)
+            rospy.loginfo(
+                "[电梯] ✓ %s %s: accepted=%s, state=%s",
+                action, door_id, resp.accepted, resp.state)
+            if not resp.accepted:
+                rospy.logwarn("[电梯] %s被拒绝: %s", action, resp.message)
+            return resp.accepted
+        except rospy.ServiceException as e:
+            rospy.logwarn("[电梯] 服务调用失败: %s", e)
+            return False
+
+    def _rotate_to_face(self, target_x, target_y, angular_vel=0.8):
+        """
+        旋转机器人使其朝向目标点。
+
+        计算目标点相对于机器人的方位角，然后旋转到该方向。
+
+        参数:
+            target_x: 目标点 x 坐标
+            target_y: 目标点 y 坐标
+            angular_vel: 旋转角速度 (rad/s)
+        """
+        robot_x, robot_y, robot_yaw = self._get_robot_pose()
+        if robot_x is None:
+            rospy.logwarn("[朝向] 无法获取机器人位姿")
+            return
+
+        # 计算目标方位角
+        target_yaw = np.arctan2(target_y - robot_y, target_x - robot_x)
+
+        # 计算需要旋转的角度差
+        yaw_diff = target_yaw - robot_yaw
+        # 归一化到 [-π, π]
+        while yaw_diff > np.pi:
+            yaw_diff -= 2.0 * np.pi
+        while yaw_diff < -np.pi:
+            yaw_diff += 2.0 * np.pi
+
+        rospy.loginfo(
+            "[朝向] 当前朝向: %.1f°, 目标朝向: %.1f°, 需旋转: %.1f°",
+            np.degrees(robot_yaw), np.degrees(target_yaw), np.degrees(yaw_diff))
+
+        # 如果角度差很小，不需要旋转
+        if abs(yaw_diff) < np.radians(5.0):
+            rospy.loginfo("[朝向] 已经朝向目标，跳过旋转")
+            return
+
+        # 执行旋转
+        rotation_time = abs(yaw_diff) / abs(angular_vel)
+        direction = 1.0 if yaw_diff > 0 else -1.0
+
+        rospy.loginfo("[朝向] 旋转 %.1f° (%.1fs)...", np.degrees(yaw_diff), rotation_time)
+
+        cmd = Twist()
+        cmd.angular.z = direction * angular_vel
+
+        start = rospy.Time.now()
+        rate = rospy.Rate(20)
+        while (rospy.Time.now() - start).to_sec() < rotation_time:
+            self.cmd_vel_pub.publish(cmd)
+            rate.sleep()
+
+        # 停止
+        self.cmd_vel_pub.publish(Twist())
+        rospy.sleep(0.3)
+        rospy.loginfo("[朝向] ✓ 旋转完成")
+
+    def _take_elevator(self, elevator_center, from_floor, to_floor):
+        """
+        完整乘梯流程：呼叫电梯 → 开门 → 进入 → 关门 → 上行 → 开门 → 离开 → 关门。
+
+        参数:
+            elevator_center: (ex, ey) 电梯中心坐标
+            from_floor: 起始楼层（0-based）
+            to_floor: 目标楼层（0-based）
+        """
+        ex, ey = elevator_center
+        from_door = f'elevator_floor_{from_floor}'
+        to_door = f'elevator_floor_{to_floor}'
+
+        rospy.loginfo(
+            "[电梯] ====== 乘梯流程: %d 楼 → %d 楼 ======",
+            from_floor, to_floor)
+
+        # ── 1. 呼叫电梯到当前楼层 ──
+        rospy.loginfo("[电梯] ① 呼叫电梯到 %d 楼...", from_floor)
+        if not self._call_elevator('elevator_main', from_floor, False):
+            rospy.logerr("[电梯] 呼叫电梯失败")
+            return
+
+        # ── 2. 开门 ──
+        rospy.loginfo("[电梯] ② 开门 %s...", from_door)
+        if not self._set_door(from_door, True):
+            rospy.logerr("[电梯] 开门失败")
+            return
+
+        # ── 3. 等待门完全打开 ──
+        rospy.loginfo("[电梯] ③ 等待门打开...")
+        rospy.sleep(1.0)
+
+        # ── 4. 更新地图 + 清除代价地图 ──
+        rospy.loginfo("[电梯] ④ 更新地图，标记电梯门区域为自由空间...")
+        self._patch_map_at_door(elevator_center, from_floor)
+
+        # ── 5. 导航进入电梯 ──
+        rospy.loginfo("[电梯] ⑤ 导航进入电梯 (%.2f, %.2f)...", ex, ey)
+        if not self._navigate_to(ex, ey, timeout=60.0):
+            rospy.logwarn("[电梯] 导航失败，尝试直线前进...")
+            self._rotate_to_face(ex, ey)
+            self._move_forward(2.0, speed=0.15)
+
+        # ── 6. 关门 ──
+        rospy.loginfo("[电梯] ⑥ 关门 %s...", from_door)
+        self._set_door(from_door, False)
+        rospy.sleep(1.0)
+
+        # ── 7. 呼叫到目标楼层 ──
+        rospy.loginfo("[电梯] ⑦ 呼叫电梯到 %d 楼...", to_floor)
+        if not self._call_elevator('elevator_main', to_floor, False):
+            rospy.logerr("[电梯] 呼叫电梯失败")
+            return
+
+        # ── 8. 开门 ──
+        rospy.loginfo("[电梯] ⑧ 开门 %s...", to_door)
+        if not self._set_door(to_door, True):
+            rospy.logerr("[电梯] 开门失败")
+            return
+
+        # ── 9. 等待门打开 ──
+        rospy.loginfo("[电梯] ⑨ 等待门打开...")
+        rospy.sleep(60.0)
+
+        # ── 10. 更新地图 + 清除代价地图（目标楼层）──
+        rospy.loginfo("[电梯] ⑩ 更新地图，标记目标楼层电梯门区域...")
+        self._patch_map_at_door(elevator_center, to_floor)
+
+        # ── 11. 导航离开电梯 ──
+        exit_y = ey + 3.0
+        rospy.loginfo("[电梯] ⑪ 导航到走廊 (0.00, %.2f)...", exit_y)
+        if not self._navigate_to(0.0, exit_y, timeout=60.0):
+            rospy.logwarn("[电梯] 导航失败，尝试直线前进...")
+            self._rotate_to_face(0.0, exit_y)
+            self._move_forward(2.0, speed=0.15)
+
+        # ── 12. 关门 ──
+        rospy.loginfo("[电梯] ⑫ 关门 %s...", to_door)
+        self._set_door(to_door, False)
+
+        rospy.loginfo(
+            "[电梯] ====== 乘梯完成: 已到达 %d 楼 ======", to_floor)
+
+    def _patch_map_at_door(self, elevator_center, floor):
+        """
+        手动更新地图 + 清除 move_base 代价地图，让导航能穿过电梯门。
+
+        问题：电梯门打开后，SLAM 地图和 move_base 代价地图都不会自动更新，
+        门区域仍显示为障碍物，导致 move_base 无法规划路径。
+
+        解决：
+          1. 将本地地图中电梯门到走廊的区域标记为自由空间 (0)
+          2. 调用 /move_base/clear_costmaps 清除代价地图
+          3. move_base 重建代价地图时，局部代价地图会用 LiDAR 数据
+             （已能看到开着的门），全局代价地图会从 /map 重建
+
+        参数:
+            elevator_center: (ex, ey) 电梯中心坐标
+            floor: 楼层（0-based）
+        """
+        if self.map_data is None:
+            rospy.logwarn("[地图补丁] 地图未就绪，跳过")
+            return
+
+        ex, ey = elevator_center
+        res = self.map_resolution
+
+        # ── 电梯门在电梯和走廊之间 ──
+        # 电梯中心在走廊右侧 (ex > 0)，门朝向走廊 (x=0 方向)
+        # 补丁区域：从走廊边缘到电梯中心，y 方向覆盖门宽
+        corridor_edge = 1.1   # 走廊右边缘 x
+        door_half_width = 1.0  # 门半宽（y 方向）
+
+        patch_x_min = corridor_edge
+        patch_x_max = ex + 0.5  # 稍微超过电梯中心
+        patch_y_min = ey - door_half_width
+        patch_y_max = ey + door_half_width
+
+        # 转换为栅格坐标
+        col_min = max(0, int((patch_x_min - self.map_origin_x) / res))
+        col_max = min(self.map_width, int((patch_x_max - self.map_origin_x) / res))
+        row_min = max(0, int((patch_y_min - self.map_origin_y) / res))
+        row_max = min(self.map_height, int((patch_y_max - self.map_origin_y) / res))
+
+        # 标记为自由空间
+        self.map_data[row_min:row_max, col_min:col_max] = 0
+
+        rospy.loginfo(
+            "[地图补丁] ✓ 楼层 %d: 标记电梯门区域为自由空间 "
+            "x[%.2f, %.2f] y[%.2f, %.2f] → 栅格 col[%d:%d] row[%d:%d]",
+            floor, patch_x_min, patch_x_max, patch_y_min, patch_y_max,
+            col_min, col_max, row_min, row_max)
+
+        # ── 清除 move_base 代价地图 ──
+        rospy.loginfo("[地图补丁] 清除 move_base 代价地图...")
+        try:
+            clear_proxy = rospy.ServiceProxy('/move_base/clear_costmaps', Empty)
+            clear_proxy()
+            rospy.loginfo("[地图补丁] ✓ 代价地图已清除")
+        except rospy.ServiceException as e:
+            rospy.logwarn("[地图补丁] 清除代价地图失败: %s", e)
+
     # ────────────── 状态持久化 ──────────────
     def _save_state(self, entrance_y=None, corridor_end_y=None):
         """保存走廊检测结果到 JSON 文件"""
@@ -2180,11 +2448,11 @@ class FrontierExplorer:
 
             # ── 3. 摆头扫描 ──
             rospy.loginfo("[房间扫描] ③ 摆头扫描...")
-            self._wiggle_scan()
+            # self._wiggle_scan()
 
             # ── 4. 房间内前沿探索 ──
             rospy.loginfo("[房间扫描] ④ 房间内前沿探索...")
-            self._explore_room(room_bounds)
+            # self._explore_room(room_bounds)
 
             # ── 5. 返回当前房间门口 ──
             rospy.loginfo("[房间扫描] ⑤ 返回门口 (0.00, %.2f)", door_y)
@@ -2675,13 +2943,59 @@ class FrontierExplorer:
         房间扫描主流程：
           1. 初始扫描（旋转、前进、走廊检测、房间估计、逐门扫描）
           2. 完成后退出
+
+        调试模式（debug_elevator=True）：
+          1. 加载走廊状态 JSON
+          2. 导航到电梯附近
+          3. 执行乘梯流程
         """
+        # ── 电梯调试模式 ──
+        if self.debug_elevator:
+            self._run_elevator_debug()
+            return
+
+        # ── 正常探索模式 ──
         rate = rospy.Rate(self.detection_freq)
         rospy.loginfo("[前沿探索] ====== 开始房间扫描 ======")
 
         self._initial_scan()
 
         rospy.loginfo("[前沿探索] ====== 房间扫描完成，节点退出 ======")
+
+    def _run_elevator_debug(self):
+        """电梯调试模式：跳过初始扫描，直接加载状态并执行乘梯"""
+        rospy.loginfo("[前沿探索] ====== 电梯调试模式 ======")
+        rospy.loginfo("[前沿探索] 目标楼层: %d", self.target_floor)
+
+        # ── 1. 加载状态 ──
+        if not self._load_state():
+            rospy.logerr("[电梯调试] 无法加载状态文件，退出")
+            return
+
+        if self.elevator_center is None:
+            rospy.logerr("[电梯调试] 状态文件中无电梯中心，退出")
+            return
+
+        ex, ey = self.elevator_center
+        rospy.loginfo("[电梯调试] 电梯中心: (%.2f, %.2f)", ex, ey)
+
+        # ── 2. 等待地图 ──
+        rospy.loginfo("[电梯调试] 等待首帧地图...")
+        while not rospy.is_shutdown() and self.map_data is None:
+            rospy.sleep(0.1)
+        if rospy.is_shutdown():
+            return
+
+        # ── 3. 导航到电梯附近 ──
+        rospy.loginfo("[电梯调试] 导航到电梯附近 (0.00, %.2f)...", ey)
+        if not self._navigate_to(0.0, ey, timeout=60.0):
+            rospy.logerr("[电梯调试] 导航到电梯附近失败")
+            return
+
+        # ── 4. 执行乘梯流程 ──
+        self._take_elevator(self.elevator_center, 0, self.target_floor)
+
+        rospy.loginfo("[前沿探索] ====== 电梯调试完成 ======")
 
 
 # ═══════════════════════════════════════════════════════════
