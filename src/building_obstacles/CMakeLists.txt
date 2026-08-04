@@ -165,6 +165,7 @@ include_directories(
 # )
 catkin_install_python(PROGRAMS
   scripts/generate_competition_scene.py
+  scripts/generate_lightweight_competition_scene.py
   scripts/generate_multi_floor_building.py
   scripts/spawn_red_spheres.py
   scripts/evaluate_danger.py

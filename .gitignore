@@ -2,5 +2,3 @@ devel/
 build/
 results/
 logs/
-.qwen/
-.vscode/

@@ -9,7 +9,7 @@ DWAPlannerROS:
   # 最大前进速度（m/s），TB3 Burger 最大 0.22 m/s
   max_vel_x: 0.4
   # 禁止倒车（设为 0），防止 DWA 在弯道或墙边选择倒车轨迹
-  min_vel_x: 0.0
+  min_vel_x: -0.1
   # 横向速度（差速驱动无横向运动能力）
   max_vel_y: 0.0
   min_vel_y: 0.0

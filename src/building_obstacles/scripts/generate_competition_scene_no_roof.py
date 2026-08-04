@@ -29,7 +29,7 @@ def _ensure_generator_on_path() -> None:
 _ensure_generator_on_path()
 
 from building_generator_core.constraints import BuildingConstraints
-from building_generator_core.exporter import export_sdf
+from building_generator_core.exporter_no_roof import export_sdf
 from building_generator_core.generator import generate_layout
 from building_generator_core.layout import BuildingLayout, FurnitureSpec, RoomSpec
 
@@ -145,7 +145,8 @@ def main(argv: list[str] | None = None) -> int:
         }
     )
     layout = generate_layout(constraints)
-    artifact_paths = export_sdf(layout, target="gazebo_classic", output_dir=output_dir)
+    artifact_paths = export_sdf(layout, target="gazebo_classic", output_dir=output_dir,
+                                include_roof=args.include_roof)
 
     obstacle_rng = random.Random(seed ^ 0x5EED5EED)
     danger_count = _sample_count(args.danger_count, obstacle_rng)
@@ -221,6 +222,10 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--robot-y", type=float, default=-2.2)
     parser.add_argument("--robot-z", type=float, default=0.6)
     parser.add_argument("--robot-yaw", type=float, default=1.5708)
+    parser.add_argument("--include-roof", dest="include_roof", action="store_true", default=True,
+                        help="Include a roof slab on top of the building (default: enabled).")
+    parser.add_argument("--no-roof", dest="include_roof", action="store_false",
+                        help="Omit the roof slab.")
     return parser
 
 

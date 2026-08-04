@@ -25,6 +25,7 @@
 如需手动启动或重启门/电梯控制服务，可在 Gazebo 场景启动后运行：
 
 ```bash
+cd /home/ros/Guoyulun/Competition/SimEnv
 source ./devel/setup.bash
 rosrun building_generator_classic building_generator_classic_control \
   --door-config ./generated_building/door_config.yaml \
@@ -80,7 +81,7 @@ rosservice call /call_elevator "{elevator_id: 'elevator_main', target_floor: 0, 
 - `main_entrance` 为首层主入口门。
 - `elevator_floor_0`、`elevator_floor_1` 等为各楼层电梯厅门。
 - `elevator_main` 为当前楼栋默认电梯 ID。
-- 电梯厅门默认采用约 25 s 开门或关门过程，控制服务会持续插值更新左右门板位置。
+- 电梯厅门默认采用 60 s 缓慢开门或关门过程，控制服务会持续插值更新左右门板位置。
 - `rosservice call /set_door_state` 通常在门动作完成后返回。
 - `/call_elevator` 负责移动轿厢到目标楼层。
 - 机器人进出轿厢仍由参赛算法通过 `/cmd_vel` 控制。

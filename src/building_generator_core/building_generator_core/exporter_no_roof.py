@@ -36,7 +36,7 @@ CORE_ROOM_BUFFER = 1.0
 VALIDATION_TOLERANCE = 1e-3
 
 
-def export_sdf(layout: BuildingLayout, target: str, output_dir: str | Path) -> ArtifactPaths:
+def export_sdf(layout: BuildingLayout, target: str, output_dir: str | Path, include_roof: bool = True) -> ArtifactPaths:
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
 
@@ -47,8 +47,8 @@ def export_sdf(layout: BuildingLayout, target: str, output_dir: str | Path) -> A
     door_config_path = output_path / "door_config.yaml"
     validation_report_path = output_path / "generation_checks.json"
 
-    world_sdf_path.write_text(_render_world_sdf(layout), encoding="utf-8")
-    model_sdf_path.write_text(_render_model_sdf(layout), encoding="utf-8")
+    world_sdf_path.write_text(_render_world_sdf(layout, include_roof=include_roof), encoding="utf-8")
+    model_sdf_path.write_text(_render_model_sdf(layout, include_roof=include_roof), encoding="utf-8")
     metadata_path.write_text(
         json.dumps(
             {
@@ -111,14 +111,14 @@ def export_sdf(layout: BuildingLayout, target: str, output_dir: str | Path) -> A
     )
 
 
-def _render_world_sdf(layout: BuildingLayout) -> str:
+def _render_world_sdf(layout: BuildingLayout, *, include_roof: bool = True) -> str:
     sdf = ET.Element("sdf", {"version": SDF_VERSION})
     world = ET.SubElement(sdf, "world", {"name": "generated_world"})
     include_sun = ET.SubElement(world, "include")
     ET.SubElement(include_sun, "uri").text = "model://sun"
     include_ground = ET.SubElement(world, "include")
     ET.SubElement(include_ground, "uri").text = "model://ground_plane"
-    world.append(_build_static_shell_model(layout))
+    world.append(_build_static_shell_model(layout, include_roof=include_roof))
     for door in layout.door_specs:
         world.append(_build_door_model(door))
     for elevator in layout.elevator_specs:
@@ -126,13 +126,13 @@ def _render_world_sdf(layout: BuildingLayout) -> str:
     return _to_pretty_xml(sdf)
 
 
-def _render_model_sdf(layout: BuildingLayout) -> str:
+def _render_model_sdf(layout: BuildingLayout, *, include_roof: bool = True) -> str:
     sdf = ET.Element("sdf", {"version": SDF_VERSION})
-    sdf.append(_build_static_shell_model(layout))
+    sdf.append(_build_static_shell_model(layout, include_roof=include_roof))
     return _to_pretty_xml(sdf)
 
 
-def _build_static_shell_model(layout: BuildingLayout) -> ET.Element:
+def _build_static_shell_model(layout: BuildingLayout, *, include_roof: bool = True) -> ET.Element:
     model = ET.Element("model", {"name": layout.model_name})
     ET.SubElement(model, "static").text = "true"
     ET.SubElement(model, "pose").text = "0 0 0 0 0 0"
@@ -158,14 +158,15 @@ def _build_static_shell_model(layout: BuildingLayout) -> ET.Element:
 
     _append_stair_geometry(model, layout=layout)
 
-    roof_z = layout.floors[-1].elevation + layout.wall_height + SLAB_THICKNESS / 2.0
-    _append_box(
-        model,
-        name="roof",
-        size=(layout.footprint["width"], layout.footprint["length"], SLAB_THICKNESS),
-        pose=(0.0, layout.footprint["length"] / 2.0, roof_z, 0.0, 0.0, 0.0),
-        color="0.72 0.74 0.76 1",
-    )
+    if include_roof:
+        roof_z = layout.floors[-1].elevation + layout.wall_height + SLAB_THICKNESS / 2.0
+        _append_box(
+            model,
+            name="roof",
+            size=(layout.footprint["width"], layout.footprint["length"], SLAB_THICKNESS),
+            pose=(0.0, layout.footprint["length"] / 2.0, roof_z, 0.0, 0.0, 0.0),
+            color="0.72 0.74 0.76 1",
+        )
     return model
 
 

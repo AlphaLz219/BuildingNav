@@ -1,65 +1,26 @@
 {
   "building_config": "/home/lab/rosProject/BuildingNav/generated_building/building_config.json",
   "competition_interfaces": {
-    "allowed_team_services": [
-      "/set_door_state",
-      "/call_elevator"
-    ],
-    "allowed_team_topics": [
-      "/clock",
-      "/cmd_vel",
-      "/scan",
-      "/livox/Pointcloud2",
-      "/livox/lidar2",
-      "/trunk_imu",
-      "/livox/imu",
-      "/real_sense/rgb/image_raw",
-      "/real_sense/rgb/camera_info",
-      "/real_sense/depth/image_raw",
-      "/real_sense/depth/camera_info",
-      "/real_sense/depth/points"
-    ],
+    "odometry_topic": "/Odometry_gazebo",
     "team_detection_file": "/home/lab/rosProject/BuildingNav/results/detected_danger.json",
-    "team_scene_info_file": "/home/lab/rosProject/BuildingNav/generated_building/team_scene_info.json",
+    "truth_file_for_referee": "/home/lab/rosProject/BuildingNav/results/danger_truth.json",
     "velocity_command_topic": "/cmd_vel"
   },
   "danger_count": 3,
-  "distractor_count": 6,
+  "distractor_count": 4,
   "door_config": "/home/lab/rosProject/BuildingNav/generated_building/door_config.yaml",
   "elevator_config": "/home/lab/rosProject/BuildingNav/generated_building/elevator_config.yaml",
-  "gazebo_physics": {
-    "contact_max_correcting_vel": 10.0,
-    "max_step_size": 0.001,
-    "ode_iters": 50,
-    "real_time_factor": 1.0,
-    "real_time_update_rate": 1000
-  },
   "layout_metadata": "/home/lab/rosProject/BuildingNav/generated_building/layout_metadata.json",
   "output_truth_file": "/home/lab/rosProject/BuildingNav/generated_building/danger_truth.json",
-  "referee_only": {
-    "generated_truth_copy": "/home/lab/rosProject/BuildingNav/generated_building/danger_truth.json",
-    "odometry_topic": "/Odometry_gazebo",
-    "referee_only_topics": [
-      "/Odometry_gazebo",
-      "/ground_truth/base_w",
-      "/ground_truth/base_trunk",
-      "/ground_truth/FL_foot",
-      "/ground_truth/FR_foot",
-      "/ground_truth/RL_foot",
-      "/ground_truth/RR_foot"
-    ],
-    "truth_file": "/home/lab/rosProject/BuildingNav/results/danger_truth.json"
-  },
   "robot_start": {
     "x": 0.0,
-    "y": -3.2,
+    "y": -2.2,
     "yaw": 1.5708,
     "z": 0.6
   },
   "schema": "competition_scene_manifest_v1",
-  "seed": 1558558060,
-  "source_count": 9,
-  "team_scene_info": "/home/lab/rosProject/BuildingNav/generated_building/team_scene_info.json",
+  "seed": 1310291061,
+  "source_count": 7,
   "truth_file": "/home/lab/rosProject/BuildingNav/results/danger_truth.json",
   "validation_report": "/home/lab/rosProject/BuildingNav/generated_building/generation_checks.json",
   "world_file": "/home/lab/rosProject/BuildingNav/generated_building/competition_scene.world"
