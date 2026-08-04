@@ -119,5 +119,11 @@
   <node pkg="rviz" type="rviz" name="rviz"
         args="-d $(find autonomous_navigation)/rviz/nav_mapping.rviz"
         if="$(arg rviz)"/>
+<!-- ============= 9. 门/电梯控制服务 ============= -->
+  <node pkg="building_generator_classic" type="building_generator_classic_control"
+        name="building_generator_classic_control" output="screen"
+        args="--door-config $(find autonomous_navigation)/../../generated_building/door_config.yaml
+              --elevator-config $(find autonomous_navigation)/../../generated_building/elevator_config.yaml"/>
+
 
 </launch>

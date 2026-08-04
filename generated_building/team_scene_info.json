@@ -40,6 +40,12 @@
         "id": "elevator_floor_1",
         "initial_open": false,
         "kind": "elevator"
+      },
+      {
+        "floor_index": 2,
+        "id": "elevator_floor_2",
+        "initial_open": false,
+        "kind": "elevator"
       }
     ],
     "elevators": [
@@ -48,7 +54,8 @@
         "id": "elevator_main",
         "served_floors": [
           0,
-          1
+          1,
+          2
         ]
       }
     ]

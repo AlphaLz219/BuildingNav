@@ -2458,7 +2458,7 @@ class FrontierExplorer:
             rospy.loginfo("[房间扫描] ⑤ 返回门口 (0.00, %.2f)", door_y)
             self._navigate_to(0.0, door_y, timeout=60.0)
 
-        # ── 全部完成：导航至最后一扇门门口，再导航至电梯 ──
+        # ── 全部完成：导航至最后一扇门门口，再导航至电梯，然后乘梯上楼 ──
         if self.elevator_center is not None and last_door_y is not None:
             ex, ey = self.elevator_center
             rospy.loginfo(
@@ -2469,6 +2469,10 @@ class FrontierExplorer:
             rospy.loginfo(
                 "[房间扫描] 导航至电梯 (0.00, %.2f)", ey)
             self._navigate_to(0.0, ey, timeout=60.0)
+
+            # ── 乘梯到下一层 ──
+            rospy.loginfo("[房间扫描] 开始乘梯流程...")
+            self._take_elevator(self.elevator_center, 0, 1)
         else:
             rospy.loginfo(
                 "[房间扫描] ====== 全部房间扫描完毕 "
