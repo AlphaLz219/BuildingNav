@@ -22,4 +22,5 @@ roslaunch autonomous_navigation exploration.launch load_state_path:=/home/lab/ro
 # 调试电梯（跳过初始扫描，加载状态，直接乘梯到 2 楼）
 roslaunch autonomous_navigation exploration.launch 
   load_state_path:=/home/lab/rosProject/BuildingNav/maps/corridor_state.json 
-  debug_elevator:=true target_floor:=1
+  debug_elevator:=true 
+  target_floor:=1

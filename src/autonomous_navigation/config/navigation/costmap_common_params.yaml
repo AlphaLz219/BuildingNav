@@ -13,6 +13,23 @@ robot_radius: 0.055
 obstacle_range: 5.0
 raytrace_range: 6.0
 
+# ---- 静态层（仅全局代价地图使用，从 /map 读取 SLAM Toolbox 地图） ----
+static_layer:
+  # 静态地图话题（SLAM Toolbox 发布的栅格地图）
+  map_topic: /map
+  # 是否订阅地图增量更新（SLAM 建图过程中会发布 /map_updates）
+  subscribe_to_updates: true
+  # 是否跟踪未知空间（未知区域不当作自由空间，规划时更保守）
+  track_unknown_space: false
+  # 地图上代价 >= 此值的栅格视为致命障碍（costmap_2d 默认 100）
+  lethal_cost_threshold: 100
+  # 未知区域的代价（-1 表示使用 costmap_2d 默认的 unknown 值）
+  unknown_cost_value: -1
+  # 三态代价地图（true：栅格仅为自由/致命/未知，false：保留地图原始 0-100 代价）
+  trinary_costmap: true
+  # 是否使用地图中的最大代价覆盖膨胀层（多用于 VFH，导航中保持 false）
+  use_maximum: false
+
 # ---- 障碍层
 obstacle_layer:
   observation_sources: scan_2d

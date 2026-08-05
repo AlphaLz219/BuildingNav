@@ -121,7 +121,7 @@ class FrontierExplorer:
         self.load_state_path = rospy.get_param('~load_state_path', '')
 
         # ── 电梯调试模式 ──
-        self.debug_elevator = rospy.get_param('~debug_elevator', False)
+        self.debug_elevator = rospy.get_param('~debug_elevator', True)
         self.target_floor = rospy.get_param('~target_floor', 1)
 
     def _init_state(self):
@@ -1726,85 +1726,181 @@ class FrontierExplorer:
         rospy.sleep(0.3)
         rospy.loginfo("[朝向] ✓ 旋转完成")
 
-    def _take_elevator(self, elevator_center, from_floor, to_floor):
+    def _measure_free_distance(self, direction_x, direction_y, max_dist=5.0):
         """
-        完整乘梯流程：呼叫电梯 → 开门 → 进入 → 关门 → 上行 → 开门 → 离开 → 关门。
+        从机器人当前位置沿指定方向测量自由空间距离。
+
+        沿方向射线扫描地图，遇到障碍物(100)或未知(-1)停止。
 
         参数:
-            elevator_center: (ex, ey) 电梯中心坐标
-            from_floor: 起始楼层（0-based）
-            to_floor: 目标楼层（0-based）
+            direction_x: 方向向量 x 分量（世界坐标）
+            direction_y: 方向向量 y 分量
+            max_dist: 最大测量距离（米）
+
+        返回: 自由空间距离（米）
+        """
+        if self.map_data is None:
+            return 0.0
+
+        robot_x, robot_y, _ = self._get_robot_pose()
+        if robot_x is None:
+            return 0.0
+
+        res = self.map_resolution
+
+        # 归一化方向向量
+        norm = np.sqrt(direction_x**2 + direction_y**2)
+        if norm < 1e-6:
+            return 0.0
+        dx = direction_x / norm
+        dy = direction_y / norm
+
+        # 沿方向步进扫描
+        step = res  # 每步一个栅格
+        dist = 0.0
+        while dist < max_dist:
+            dist += step
+            wx = robot_x + dx * dist
+            wy = robot_y + dy * dist
+
+            col = int((wx - self.map_origin_x) / res)
+            row = int((wy - self.map_origin_y) / res)
+
+            if col < 0 or col >= self.map_width or row < 0 or row >= self.map_height:
+                break
+
+            val = self.map_data[row, col]
+            if val == 100 or val == -1:
+                break
+
+        rospy.loginfo(
+            "[测距] 方向(%.1f, %.1f): 自由空间 %.2fm",
+            direction_x, direction_y, dist)
+        return dist
+
+    def _take_elevator(self, elevator_center, from_floor, to_floor):
+        """
+        完整乘梯流程。
+
+        电梯在 x 方向长度固定 2.4m，门在电梯靠近走廊一侧 (ex - 1.2)。
+
+        进入电梯：
+          1. 导航到门前 0.3m (ex - 1.2 - 0.3, ey)
+          2. 旋转正朝 +x 方向
+          3. 呼叫电梯 + 开门（阻塞直到门完全打开）
+          4. 微调朝向
+          5. 前进 1m 进入电梯
+          6. 导航到电梯中心
+
+        离开电梯：
+          7. 朝向 -x 方向
+          8. 开门（阻塞直到完全打开）
+          9. 前进离开电梯
+          10. 导航到走廊
         """
         ex, ey = elevator_center
         from_door = f'elevator_floor_{from_floor}'
         to_door = f'elevator_floor_{to_floor}'
 
+        # 电梯 x 方向长 2.4m，门面在 ex - 1.2
+        door_x = ex - 1.2
+        approach_x = door_x - 0.3  # 门前 0.3m
+
         rospy.loginfo(
             "[电梯] ====== 乘梯流程: %d 楼 → %d 楼 ======",
             from_floor, to_floor)
+        rospy.loginfo(
+            "[电梯] 电梯中心=(%.2f, %.2f), 门面 x=%.2f, 接近点 x=%.2f",
+            ex, ey, door_x, approach_x)
 
-        # ── 1. 呼叫电梯到当前楼层 ──
-        rospy.loginfo("[电梯] ① 呼叫电梯到 %d 楼...", from_floor)
+        # ════════════════════════════════════════
+        #  进入电梯
+        # ════════════════════════════════════════
+
+        # ── 1. 导航到门前 0.3m ──
+        rospy.loginfo("[电梯] ① 导航到门前 (%.2f, %.2f)...", approach_x, ey)
+        if not self._navigate_to(approach_x, ey, timeout=30.0):
+            rospy.logwarn("[电梯] 导航到门前失败，在当前位置继续")
+
+        # 等待 Gazebo 物理稳定（防止轮子惯性导致位姿漂移）
+        rospy.sleep(0.5)
+
+        # ── 2. 旋转正朝 +x 方向 ──
+        rospy.loginfo("[电梯] ② 旋转正朝 +x 方向...")
+        rx, ry, _ = self._get_robot_pose()
+        if rx is not None:
+            self._rotate_to_face(rx + 1.0, ry)
+
+        # ── 3. 呼叫电梯 + 开门（阻塞直到门完全打开）──
+        rospy.loginfo("[电梯] ③ 呼叫电梯到 %d 楼...", from_floor)
         if not self._call_elevator('elevator_main', from_floor, False):
             rospy.logerr("[电梯] 呼叫电梯失败")
             return
 
-        # ── 2. 开门 ──
-        rospy.loginfo("[电梯] ② 开门 %s...", from_door)
+        rospy.loginfo("[电梯] ④ 开门 %s（等待完全打开）...", from_door)
         if not self._set_door(from_door, True):
             rospy.logerr("[电梯] 开门失败")
             return
+        rospy.loginfo("[电梯] ✓ 门已完全打开")
 
-        # ── 3. 等待门完全打开 ──
-        rospy.loginfo("[电梯] ③ 等待门打开...")
-        rospy.sleep(1.0)
+        # ── 4. 微调朝向（开门过程可能有轻微偏移）──
+        rospy.loginfo("[电梯] ⑤ 微调朝向 +x...")
+        rx2, ry2, _ = self._get_robot_pose()
+        if rx2 is not None:
+            self._rotate_to_face(rx2 + 1.0, ry2)
 
-        # ── 4. 更新地图 + 清除代价地图 ──
-        rospy.loginfo("[电梯] ④ 更新地图，标记电梯门区域为自由空间...")
-        self._patch_map_at_door(elevator_center, from_floor)
+        # ── 5. 前进 1m 进入电梯 ──
+        rospy.loginfo("[电梯] ⑥ 前进 1m 进入电梯...")
+        self._move_forward(1.0, speed=0.12)
 
-        # ── 5. 导航进入电梯 ──
-        rospy.loginfo("[电梯] ⑤ 导航进入电梯 (%.2f, %.2f)...", ex, ey)
-        if not self._navigate_to(ex, ey, timeout=60.0):
-            rospy.logwarn("[电梯] 导航失败，尝试直线前进...")
-            self._rotate_to_face(ex, ey)
-            self._move_forward(2.0, speed=0.15)
+        # ── 6. 导航到电梯中心 ──
+        rospy.loginfo("[电梯] ⑦ 导航到电梯中心 (%.2f, %.2f)...", ex, ey)
+        if not self._navigate_to(ex, ey, timeout=30.0):
+            rospy.logwarn("[电梯] 导航到中心失败，已在电梯内")
 
-        # ── 6. 关门 ──
-        rospy.loginfo("[电梯] ⑥ 关门 %s...", from_door)
+        # ── 8. 关门 ──
+        rospy.loginfo("[电梯] ⑧ 关门 %s...", from_door)
         self._set_door(from_door, False)
         rospy.sleep(1.0)
 
-        # ── 7. 呼叫到目标楼层 ──
-        rospy.loginfo("[电梯] ⑦ 呼叫电梯到 %d 楼...", to_floor)
+        # ════════════════════════════════════════
+        #  电梯运行
+        # ════════════════════════════════════════
+
+        rospy.loginfo("[电梯] ⑨ 呼叫电梯到 %d 楼...", to_floor)
         if not self._call_elevator('elevator_main', to_floor, False):
             rospy.logerr("[电梯] 呼叫电梯失败")
             return
 
-        # ── 8. 开门 ──
-        rospy.loginfo("[电梯] ⑧ 开门 %s...", to_door)
+        # ── 10. 开门 ──
+        rospy.loginfo("[电梯] ⑩ 开门 %s（等待完全打开）...", to_door)
         if not self._set_door(to_door, True):
             rospy.logerr("[电梯] 开门失败")
             return
+        rospy.loginfo("[电梯] ✓ 门已完全打开")
 
-        # ── 9. 等待门打开 ──
-        rospy.loginfo("[电梯] ⑨ 等待门打开...")
-        rospy.sleep(60.0)
+        # ════════════════════════════════════════
+        #  离开电梯
+        # ════════════════════════════════════════
 
-        # ── 10. 更新地图 + 清除代价地图（目标楼层）──
-        rospy.loginfo("[电梯] ⑩ 更新地图，标记目标楼层电梯门区域...")
-        self._patch_map_at_door(elevator_center, to_floor)
+        # ── 11. 朝向 -x 方向（面向走廊）──
+        rospy.loginfo("[电梯] ⑪ 朝向走廊 (-x 方向)...")
+        rx3, ry3, _ = self._get_robot_pose()
+        if rx3 is not None:
+            self._rotate_to_face(rx3 - 1.0, ry3)
 
-        # ── 11. 导航离开电梯 ──
-        exit_y = ey + 3.0
-        rospy.loginfo("[电梯] ⑪ 导航到走廊 (0.00, %.2f)...", exit_y)
+        # ── 12. 前进离开电梯 ──
+        rospy.loginfo("[电梯] ⑫ 前进 2.5m 离开电梯...")
+        self._move_forward(2.5, speed=0.12)
+
+        # ── 13. 导航到走廊 ──
+        exit_y = ey + 2.0
+        rospy.loginfo("[电梯] ⑬ 导航到走廊 (0.00, %.2f)...", exit_y)
         if not self._navigate_to(0.0, exit_y, timeout=60.0):
-            rospy.logwarn("[电梯] 导航失败，尝试直线前进...")
-            self._rotate_to_face(0.0, exit_y)
-            self._move_forward(2.0, speed=0.15)
+            rospy.logwarn("[电梯] 导航到走廊失败")
 
-        # ── 12. 关门 ──
-        rospy.loginfo("[电梯] ⑫ 关门 %s...", to_door)
+        # ── 14. 关门 ──
+        rospy.loginfo("[电梯] ⑭ 关门 %s...", to_door)
         self._set_door(to_door, False)
 
         rospy.loginfo(

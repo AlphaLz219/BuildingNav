@@ -628,8 +628,8 @@ def _append_elevator_shaft_details(model: ET.Element, *, floor: FloorLayout) -> 
     _append_box(
         model,
         name=f"elevator_threshold_floor_{floor.floor_index}",
-        size=(0.22, 1.50, 0.06),
-        pose=(shaft.x_min - 0.11, shaft.center[1], floor.elevation + 0.03, 0.0, 0.0, 0.0),
+        size=(0.22, 1.50, 0.0005),
+        pose=(shaft.x_min - 0.11, shaft.center[1], floor.elevation + 0.00025, 0.0, 0.0, 0.0),
         color="0.50 0.51 0.54 1",
     )
     _append_box(
