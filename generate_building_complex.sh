@@ -45,6 +45,7 @@ LOBBY_DEPTH="${LOBBY_DEPTH:-4.2}"               # 大厅深度（米）
 
 # ---- 门/电梯控制服务 ----
 START_BUILDING_CONTROL="${START_BUILDING_CONTROL:-1}" # 是否启动门/电梯控制服务（默认启动）
+ROBOT_MODEL="${ROBOT_MODEL:-tb3_mid360}"              # 机器人 Gazebo 模型名（电梯同步移动用）
 
 # =============================================================================
 # 3. 加载 ROS 环境
@@ -152,6 +153,7 @@ if [ "$START_BUILDING_CONTROL" = "1" ]; then
   rosrun building_generator_classic building_generator_classic_control \
     --door-config "$SCENE_OUTPUT_DIR/door_config.yaml" \
     --elevator-config "$SCENE_OUTPUT_DIR/elevator_config.yaml" \
+    --robot-model "$ROBOT_MODEL" \
     > "$WORKSPACE_DIR/logs/building_control.log" 2>&1 &
   echo $! > "$WORKSPACE_DIR/logs/building_control.pid"
 fi

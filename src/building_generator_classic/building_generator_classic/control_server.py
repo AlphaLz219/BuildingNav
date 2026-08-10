@@ -23,16 +23,28 @@ def main(argv: list[str] | None = None) -> int:
 
     args = _build_parser().parse_args(rospy.myargv(argv=argv)[1:])
     runtime = _load_runtime(args.door_config, args.elevator_config)
+    robot_model = args.robot_model or ""
 
     rospy.init_node("building_generator_classic_control")
     rospy.wait_for_service("/gazebo/set_model_state")
     rospy.wait_for_service("/gazebo/set_link_state")
     set_model_state = rospy.ServiceProxy("/gazebo/set_model_state", SetModelState)
     set_link_state = rospy.ServiceProxy("/gazebo/set_link_state", SetLinkState)
+
+    get_model_state = None
+    if robot_model:
+        rospy.wait_for_service("/gazebo/get_model_state")
+        from gazebo_msgs.srv import GetModelState
+        get_model_state = rospy.ServiceProxy("/gazebo/get_model_state", GetModelState)
+        rospy.loginfo("Robot co-move enabled for model '%s'", robot_model)
+
     rospy.Service(
         "call_elevator",
         CallElevator,
-        lambda request: _handle_call_elevator(runtime, request, CallElevatorResponse, set_model_state),
+        lambda request: _handle_call_elevator(
+            runtime, request, CallElevatorResponse,
+            set_model_state, get_model_state, robot_model,
+        ),
     )
     rospy.Service(
         "set_door_state",
@@ -48,6 +60,8 @@ def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Building generator Gazebo Classic control server")
     parser.add_argument("--door-config", required=True)
     parser.add_argument("--elevator-config", required=True)
+    parser.add_argument("--robot-model", default="",
+                        help="Gazebo model name of the robot to co-move with the elevator (e.g. tb3_mid360)")
     return parser
 
 
@@ -60,7 +74,15 @@ def _load_runtime(door_config_path: str, elevator_config_path: str) -> BuildingC
     )
 
 
-def _handle_call_elevator(runtime: BuildingControlRuntime, request, response_type, set_model_state):
+def _handle_call_elevator(runtime: BuildingControlRuntime, request, response_type,
+                          set_model_state, get_model_state=None, robot_model: str = ""):
+    elevator_state = runtime._elevators.get(request.elevator_id)
+    start_z = None
+    if elevator_state is not None:
+        start_pose = elevator_state.floor_poses.get(elevator_state.current_floor)
+        if start_pose:
+            start_z = float(start_pose[2])
+
     result = runtime.call_elevator(
         request.elevator_id,
         request.target_floor,
@@ -68,12 +90,44 @@ def _handle_call_elevator(runtime: BuildingControlRuntime, request, response_typ
     )
     if result.get("accepted") and result.get("target_pose"):
         _apply_model_pose(set_model_state, result["model_name"], result["target_pose"])
+
+        if robot_model and get_model_state is not None and start_z is not None:
+            delta_z = float(result["target_pose"][2]) - start_z
+            _co_move_robot(set_model_state, get_model_state, robot_model, delta_z)
+
     return response_type(
         accepted=bool(result["accepted"]),
         current_floor=int(result["current_floor"]),
         state=str(result["state"]),
         message=str(result["message"]),
     )
+
+
+def _co_move_robot(set_model_state, get_model_state, robot_model: str, delta_z: float) -> None:
+    import rospy
+    if abs(delta_z) < 1e-4:
+        return
+    try:
+        from gazebo_msgs.msg import ModelState
+
+        resp = get_model_state(robot_model, "world")
+        if not resp.success:
+            rospy.logwarn("Failed to get robot pose for '%s': %s", robot_model, resp.status_message)
+            return
+
+        pose = resp.pose
+        pose.position.z += delta_z
+
+        state = ModelState()
+        state.model_name = robot_model
+        state.pose = pose
+        state.twist = resp.twist
+        state.reference_frame = "world"
+        set_model_state(state)
+        rospy.loginfo("Co-moved robot '%s' by Δz=%.3f (new z=%.3f)",
+                       robot_model, delta_z, pose.position.z)
+    except Exception as exc:
+        rospy.logwarn("Co-move robot '%s' failed: %s", robot_model, exc)
 
 
 def _handle_set_door_state(runtime: BuildingControlRuntime, request, response_type, set_model_state, set_link_state):

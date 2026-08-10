@@ -12,12 +12,23 @@
   <!-- ============= 2. 前沿探索节点 ============= -->
   <arg name="save_state_path" default=""/>
   <arg name="load_state_path" default=""/>
+  <!-- 多楼层 SLAM 会话目录（每层一个 .session 文件），留空则不启用 -->
+  <arg name="floor_session_dir" default=""/>
+  <!-- 启动时所在楼层（0-based），默认 0 -->
+  <arg name="current_floor" default="0"/>
+  <!-- slam_toolbox 重启用的 launch（多楼层会话重置，替代缺失的 reset 服务） -->
+  <arg name="slam_launch_pkg" default="autonomous_navigation"/>
+  <arg name="slam_launch_file" default="slam_toolbox.launch"/>
   <node pkg="autonomous_navigation" type="frontier_exploration.py"
         name="frontier_exploration" output="screen">
     <rosparam file="$(find autonomous_navigation)/config/exploration_params.yaml"
               command="load"/>
     <param name="save_state_path" value="$(arg save_state_path)"/>
     <param name="load_state_path" value="$(arg load_state_path)"/>
+    <param name="floor_session_dir" value="$(arg floor_session_dir)"/>
+    <param name="current_floor" value="$(arg current_floor)"/>
+    <param name="slam_launch_pkg" value="$(arg slam_launch_pkg)"/>
+    <param name="slam_launch_file" value="$(arg slam_launch_file)"/>
   </node>
 
   <!-- ============= 3. 探索专用 RViz ============= -->

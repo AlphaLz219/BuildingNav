@@ -1,14 +1,7 @@
 {
   "permissions": {
     "allow": [
-      "Bash(source *)",
-      "Bash(catkin_make)",
-      "Bash(chmod *)",
-      "Bash(ls *)",
-      "Agent(Explore)",
-      "Bash(tail *)",
-      "Bash(python3 *)",
-      "Bash(rosparam *)"
+      "Bash(python3 *)"
     ]
   },
   "$version": 4

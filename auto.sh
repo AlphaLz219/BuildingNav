@@ -17,6 +17,7 @@ START_CONTROLLER="${START_CONTROLLER:-1}"
 START_VIRTUAL_JOY="${START_VIRTUAL_JOY:-0}"
 CONTROLLER_FOREGROUND="${CONTROLLER_FOREGROUND:-1}"
 START_BUILDING_CONTROL="${START_BUILDING_CONTROL:-1}"
+ROBOT_MODEL="${ROBOT_MODEL:-a1}"
 UNITREE_CTRL_DT="${UNITREE_CTRL_DT:-0.004}"
 ROBOT_X="${ROBOT_X:-0.0}"
 ROBOT_Y="${ROBOT_Y:--2.2}"
@@ -144,6 +145,7 @@ if [ "$START_BUILDING_CONTROL" = "1" ]; then
   rosrun building_generator_classic building_generator_classic_control \
     --door-config "$SCENE_OUTPUT_DIR/door_config.yaml" \
     --elevator-config "$SCENE_OUTPUT_DIR/elevator_config.yaml" \
+    --robot-model "$ROBOT_MODEL" \
     > "$WORKSPACE_DIR/logs/building_control.log" 2>&1 &
   echo $! > "$WORKSPACE_DIR/logs/building_control.pid"
 fi

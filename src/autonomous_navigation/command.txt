@@ -24,3 +24,9 @@ roslaunch autonomous_navigation exploration.launch
   load_state_path:=/home/lab/rosProject/BuildingNav/maps/corridor_state.json 
   debug_elevator:=true 
   target_floor:=1
+
+roslaunch autonomous_navigation exploration.launch 
+  floor_session_dir:=/home/lab/rosProject/BuildingNav/sessions 
+  load_state_path:=/home/lab/rosProject/BuildingNav/maps/corridor_state.json 
+  debug_elevator:=true 
+  target_floor:=1

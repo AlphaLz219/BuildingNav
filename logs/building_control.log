@@ -1,0 +1,12 @@
+Unable to register with master node [http://localhost:11311]: master may not be running yet. Will keep trying.
+shutdown request: [/building_generator_classic_control] Reason: new node registered with same name
+Traceback (most recent call last):
+  File "/home/lab/rosProject/BuildingNav/devel/lib/building_generator_classic/building_generator_classic_control", line 15, in <module>
+    exec(compile(fh.read(), python_script, 'exec'), context)
+  File "/home/lab/rosProject/BuildingNav/src/building_generator_classic/scripts/building_generator_classic_control", line 7, in <module>
+    raise SystemExit(main())
+  File "/home/lab/rosProject/BuildingNav/src/building_generator_classic/./building_generator_classic/control_server.py", line 28, in main
+    rospy.wait_for_service("/gazebo/set_model_state")
+  File "/opt/ros/noetic/lib/python3/dist-packages/rospy/impl/tcpros_service.py", line 166, in wait_for_service
+    raise ROSInterruptException("rospy shutdown")
+rospy.exceptions.ROSInterruptException: rospy shutdown
