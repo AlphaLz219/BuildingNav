@@ -1,0 +1,15 @@
+# ============================================================
+# 全局规划器参数（global_planner/GlobalPlanner）
+# 算法：A* 搜索，在已知地图上规划最优路径
+# ============================================================
+
+GlobalPlanner:
+  allow_unknown: true
+  use_dijkstra: true
+  use_quadratic: true
+  use_grid_path: false
+  old_behavior: false
+  default_tolerance: 0.3
+  lethal_cost: 253
+  neutral_cost: 30
+  cost_factor: 5.0

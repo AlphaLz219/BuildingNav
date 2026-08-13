@@ -1,0 +1,49 @@
+# ============================================================
+# 代价地图共享参数（global_costmap 与 local_costmap 共用）
+# 适配：Known-Pose Mapping 2D 建图 + Livox Mid-360（A1 机器狗）
+# 参考：unitree_guide/unitree_move_base/config（官方配置）
+# ============================================================
+
+# A1 机器狗 footprint（官方参数）
+footprint: [[0.3, 0.15], [0.3, -0.15], [-0.35, -0.15], [-0.35, 0.15]]
+
+# 顶层参数作为 obstacle_layer 回退读取的默认值
+obstacle_range: 5.0
+raytrace_range: 6.0
+inflation_radius: 0.03
+max_obstacle_height: 1.0
+min_obstacle_height: 0.0
+
+# ---- 静态层（仅全局代价地图使用，从 /map 读取 Known-Pose Mapper 地图） ----
+static_layer:
+  map_topic: /map
+  subscribe_to_updates: false
+  track_unknown_space: false
+  lethal_cost_threshold: 100
+  unknown_cost_value: -1
+  trinary_costmap: true
+  use_maximum: false
+
+# ---- 障碍层 ----
+obstacle_layer:
+  observation_sources: scan_2d
+  obstacle_range: 5.0
+  raytrace_range: 6.0
+
+  scan_2d:
+    data_type: LaserScan
+    topic: /scan_2d
+    sensor_model_type: ray
+    clearing: true
+    marking: true
+    raytrace_range: 6.0
+    obstacle_range: 5.0
+    max_obstacle_height: 0.6
+    min_obstacle_height: -0.1
+    inf_is_valid: true
+    observation_persistence: 0.0
+
+# ---- 膨胀层 ----
+inflation_layer:
+  inflation_radius: 0.03
+  cost_scaling_factor: 10.0

@@ -1,0 +1,100 @@
+<?xml version="1.0" ?>
+<launch>
+  <!-- ==================================================================
+       bringup_a1_mapping.launch
+       A1 机器狗 Known-Pose Mapping 调试启动文件 (Step 1)
+
+       前置条件：先运行 auto.sh 启动 Gazebo + A1 模型 + 控制器
+         ./auto.sh
+
+       本 launch 只启动：
+         1. 水平激光坐标系 (laser_livox_level)
+         2. PointCloud2 → 2D LaserScan
+         3. known_pose_mapper 建图节点
+         4. RViz 可视化
+
+       用法：
+         # 终端1: 启动仿真
+         ./auto.sh
+
+         # 终端2: 启动建图
+         roslaunch autonomous_navigation bringup_a1_mapping.launch
+       ================================================================== -->
+
+  <arg name="rviz" default="true"/>
+  <arg name="load_state" default="" doc="加载已保存的走廊状态文件路径（留空则从头开始）"/>
+
+  <!-- ============= 1. 水平激光坐标系 ============= -->
+  <!-- Livox Mid-360 安装在 base 上，倾斜 45°（rpy 0 0.785 0）。
+       创建水平虚拟坐标系 laser_livox_level，位于 Livox 相同位置但无倾斜，
+       确保 pointcloud_to_laserscan 投影面严格水平。 -->
+  <node pkg="tf" type="static_transform_publisher"
+        name="laser_livox_level_tf"
+        args="0.2 0 0.08 0 0 0 base laser_livox_level 100"/>
+
+  <!-- ============= 2. PointCloud2 → 2D LaserScan ============= -->
+  <!-- 将 pointcloud2livox.py 输出的 PointCloud2 转换为 2D LaserScan，
+       供 known_pose_mapper 建图使用。 -->
+  <node pkg="pointcloud_to_laserscan" type="pointcloud_to_laserscan_node"
+        name="pointcloud_to_laserscan">
+    <remap from="cloud_in"  to="/livox/Pointcloud2"/>
+    <remap from="scan"      to="/scan_2d"/>
+
+    <param name="target_frame"        value="laser_livox_level"/>
+    <param name="transform_tolerance" value="0.1"/>
+    <!-- 高度过滤：地面上方约 6cm~51cm 捕获墙壁立面 -->
+    <param name="min_height"          value="-0.20"/>
+    <param name="max_height"          value="0.10"/>
+    <param name="angle_min"           value="-3.14159"/>
+    <param name="angle_max"           value="3.14100"/>
+    <param name="angle_increment"     value="0.005812"/>
+    <param name="range_min"           value="0.3"/>
+    <param name="range_max"           value="30.0"/>
+    <param name="concurrency_level"   value="1"/>
+  </node>
+
+  <!-- ============= 3. Known-Pose Mapping 节点 ============= -->
+  <node pkg="autonomous_navigation" type="known_pose_mapper.py"
+        name="known_pose_mapper" output="screen">
+    <param name="resolution"    value="0.05"/>
+    <param name="map_width"     value="800"/>
+    <param name="map_height"    value="800"/>
+    <param name="publish_rate"  value="2.0"/>
+    <param name="laser_frame"   value="laser_livox_level"/>
+    <param name="map_frame"     value="map"/>
+  </node>
+
+  <!-- ============= 4. Move Base 导航 ============= -->
+  <node pkg="move_base" type="move_base" name="move_base" respawn="false" output="screen">
+    <remap from="odom" to="/Odometry_gazebo"/>
+    <rosparam file="$(find autonomous_navigation)/config/navigation_a1/costmap_common_params.yaml"
+              command="load" ns="global_costmap"/>
+    <rosparam file="$(find autonomous_navigation)/config/navigation_a1/costmap_common_params.yaml"
+              command="load" ns="local_costmap"/>
+    <rosparam file="$(find autonomous_navigation)/config/navigation_a1/global_costmap_params.yaml"
+              command="load"/>
+    <rosparam file="$(find autonomous_navigation)/config/navigation_a1/local_costmap_params.yaml"
+              command="load"/>
+    <rosparam file="$(find autonomous_navigation)/config/navigation_a1/global_planner_params.yaml"
+              command="load"/>
+    <rosparam file="$(find autonomous_navigation)/config/navigation_a1/dwa_local_planner_params.yaml"
+              command="load"/>
+    <rosparam file="$(find autonomous_navigation)/config/navigation_a1/move_base_params.yaml"
+              command="load"/>
+  </node>
+
+  <!-- ============= 5. 前沿探索节点 ============= -->
+  <node pkg="autonomous_navigation" type="frontier_exploration_a1.py"
+        name="frontier_exploration" output="screen">
+    <rosparam file="$(find autonomous_navigation)/config/exploration_params.yaml"
+              command="load"/>
+    <param name="save_state_path" value="$(find autonomous_navigation)/../../maps/corridor_state.json"/>
+    <param name="load_state_path" value="$(arg load_state)"/>
+  </node>
+
+  <!-- ============= 6. RViz ============= -->
+  <node pkg="rviz" type="rviz" name="rviz_mapping"
+        args="-d $(find autonomous_navigation)/rviz/a1_mapping.rviz"
+        if="$(arg rviz)"/>
+
+</launch>

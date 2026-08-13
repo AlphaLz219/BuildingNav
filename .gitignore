@@ -4,3 +4,4 @@ results/
 logs/
 generated_building/
 my_generated_building/
+.qwen/

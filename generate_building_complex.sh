@@ -21,7 +21,7 @@ cd "$WORKSPACE_DIR"
 SEED="${SEED:-}"
 
 # ---- 建筑结构参数 ----
-FLOOR_COUNT="${FLOOR_COUNT:-2}"              # 楼层数量，默认 3 层
+FLOOR_COUNT="${FLOOR_COUNT:-1}"              # 楼层数量，默认 3 层
 ROOMS_PER_FLOOR="${ROOMS_PER_FLOOR:-4}"      # 每层房间数，默认 4 间
 BUILDING_WIDTH="${BUILDING_WIDTH:-20.0}"     # 建筑宽度（米），默认 20m
 BUILDING_LENGTH="${BUILDING_LENGTH:-36.0}"   # 建筑长度（米），默认 36m

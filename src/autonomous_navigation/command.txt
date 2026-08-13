@@ -5,6 +5,9 @@ roslaunch autonomous_navigation bringup_tb3_mid360_toolbox.launch
 roslaunch autonomous_navigation navigation.launch
 roslaunch autonomous_navigation exploration.launch
 
+// A1 机器狗
+./my_auto.sh
+roslaunch autonomous_navigation bringup_a1_mapping.launch
 
 // 调试
 // # 1. 正常启动仿真

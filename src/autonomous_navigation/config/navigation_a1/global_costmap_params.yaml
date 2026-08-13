@@ -1,0 +1,19 @@
+# ============================================================
+# 全局代价地图参数
+# 用途：全局路径规划，基于 Known-Pose Mapper 发布的静态地图
+# ============================================================
+
+global_costmap:
+  global_frame: map
+  robot_base_frame: base
+
+  update_frequency: 5.0
+  publish_frequency: 2.0
+
+  rolling_window: false
+
+  transform_tolerance: 1.0
+
+  plugins:
+    - {name: static_layer, type: costmap_2d::StaticLayer}
+    - {name: inflation_layer, type: costmap_2d::InflationLayer}
