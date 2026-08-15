@@ -13,7 +13,7 @@ as_ros_bool() {
 }
 
 SEED="${SEED:-}"
-FLOOR_COUNT="${FLOOR_COUNT:-3}"
+FLOOR_COUNT="${FLOOR_COUNT:-2}"
 ROOMS_PER_FLOOR="${ROOMS_PER_FLOOR:-4}"
 BUILDING_WIDTH="${BUILDING_WIDTH:-20.0}"
 BUILDING_LENGTH="${BUILDING_LENGTH:-36.0}"
@@ -51,7 +51,7 @@ GAZEBO_PHYSICS_REAL_TIME_UPDATE_RATE="${GAZEBO_PHYSICS_REAL_TIME_UPDATE_RATE:-50
 GAZEBO_PHYSICS_ODE_ITERS="${GAZEBO_PHYSICS_ODE_ITERS:-40}"
 GAZEBO_PHYSICS_CONTACT_MAX_CORRECTING_VEL="${GAZEBO_PHYSICS_CONTACT_MAX_CORRECTING_VEL:-5.0}"
 ROBOT_X="${ROBOT_X:-0.0}"
-ROBOT_Y="${ROBOT_Y:--3.2}"
+ROBOT_Y="${ROBOT_Y:-0.45}"
 ROBOT_Z="${ROBOT_Z:-0.6}"
 ROBOT_YAW="${ROBOT_YAW:-1.5708}"
 
@@ -98,6 +98,58 @@ wait_for_robot_spawn() {
   echo "Timed out waiting for robot spawn. Last log lines:" >&2
   tail -n 80 "$WORKSPACE_DIR/logs/competition_gazebo.log" >&2
   exit 1
+}
+
+wait_for_joint_states() {
+  local timeout="${1:-30}"
+  local deadline=$((SECONDS + timeout))
+  echo "[INFO] Waiting for Gazebo joint_states & IMU (up to ${timeout}s)..."
+  while [ "$SECONDS" -lt "$deadline" ]; do
+    if ! kill -0 "$LAUNCH_PID" 2>/dev/null; then
+      echo "roslaunch exited while waiting for joint states." >&2
+      tail -n 80 "$WORKSPACE_DIR/logs/competition_gazebo.log" >&2
+      exit 1
+    fi
+    local js_ok=0 imu_ok=0
+    # Check that topics not only have publishers, but actually have data
+    if rostopic info /a1_gazebo/joint_states 2>/dev/null | grep -q "Publishers" && \
+       timeout 2s rostopic echo /a1_gazebo/joint_states --noarr -n1 2>/dev/null | grep -q "header:"; then
+      js_ok=1
+    elif rostopic info /joint_states 2>/dev/null | grep -q "Publishers" && \
+         timeout 2s rostopic echo /joint_states --noarr -n1 2>/dev/null | grep -q "header:"; then
+      js_ok=1
+    fi
+    if rostopic info /trunk_imu 2>/dev/null | grep -q "Publishers" && \
+       timeout 2s rostopic echo /trunk_imu --noarr -n1 2>/dev/null | grep -q "header:"; then
+      imu_ok=1
+    fi
+    if [ "$js_ok" = "1" ] && [ "$imu_ok" = "1" ]; then
+      echo "[INFO] joint_states and IMU topics are publishing data."
+      return
+    fi
+    sleep 0.5
+  done
+  echo "[WARN] Timed out waiting for joint_states/IMU after ${timeout}s. Proceeding anyway."
+}
+
+wait_for_controller_manager() {
+  local timeout="${1:-60}"
+  local deadline=$((SECONDS + timeout))
+  echo "[INFO] Waiting for controller_manager service (up to ${timeout}s)..."
+  while [ "$SECONDS" -lt "$deadline" ]; do
+    if ! kill -0 "$LAUNCH_PID" 2>/dev/null; then
+      echo "roslaunch exited while waiting for controller_manager." >&2
+      tail -n 80 "$WORKSPACE_DIR/logs/competition_gazebo.log" >&2
+      exit 1
+    fi
+    # controller_spawner connects to /a1_gazebo/controller_manager/... services
+    if rosservice list 2>/dev/null | grep -q '/a1_gazebo/controller_manager/'; then
+      echo "[INFO] controller_manager services are available."
+      return
+    fi
+    sleep 0.5
+  done
+  echo "[WARN] Timed out waiting for controller_manager after ${timeout}s. Proceeding anyway."
 }
 
 echo "Terminating previous Gazebo, launch, controller, and optional joystick processes..."
@@ -162,7 +214,9 @@ export UNITREE_CTRL_DT
 export UNITREE_LOG_WAIT_WARNINGS
 export CONTROLLER_SPAWNER_TIMEOUT
 export GAZEBO_MODEL_PATH="${GAZEBO_MODEL_PATH:-}:$SCENE_OUTPUT_DIR:$UNITREE_GAZEBO_MODELS"
-export GAZEBO_PLUGIN_PATH="$WORKSPACE_DIR/devel/lib:${GAZEBO_PLUGIN_PATH:-}"
+# Include /opt/ros/noetic/lib so Gazebo can find system plugins like
+# libgazebo_ros_control.so, libgazebo_ros_imu_sensor.so, etc.
+export GAZEBO_PLUGIN_PATH="$WORKSPACE_DIR/devel/lib:/opt/ros/noetic/lib:${GAZEBO_PLUGIN_PATH:-}"
 
 echo "=========================================="
 echo "Competition scene is ready"
@@ -233,6 +287,11 @@ if [ "$START_BUILDING_CONTROL" = "1" ]; then
     > "$WORKSPACE_DIR/logs/building_control.log" 2>&1 &
   echo $! > "$WORKSPACE_DIR/logs/building_control.pid"
 fi
+
+# Wait for Gazebo joint_states + IMU before starting the controller.
+# Without this, junior_ctrl blocks forever on hasFullStateFeedback() because
+# gazebo_ros_control only starts publishing after physics unpauses and runs a few steps.
+wait_for_joint_states 30
 
 if [ "$START_CONTROLLER" = "1" ]; then
   if [ "$CONTROLLER_FOREGROUND" = "1" ]; then

@@ -4,7 +4,12 @@
       "Bash(python3 *)",
       "Bash(tail *)",
       "Bash(chmod *)",
-      "Bash(cp *)"
+      "Bash(cp *)",
+      "Bash(source *)",
+      "Bash(rostopic *)",
+      "Bash(timeout *)",
+      "Bash(rosnode *)",
+      "Bash(rosparam *)"
     ]
   },
   "$version": 4

@@ -6,7 +6,7 @@ Panels:
       Expanded:
         - /Global Options1
       Splitter Ratio: 0.5
-    Tree Height: 510
+    Tree Height: 502
   - Class: rviz/Views
     Expanded:
       - /Current View1
@@ -15,7 +15,7 @@ Panels:
   - Class: rviz/Time
     Name: Time
     SyncMode: 0
-    SyncSource: PointCloud2 (/livox)
+    SyncSource: LaserScan (/scan_2d)
 Preferences:
   PromptSaveOnExit: true
 Toolbars:
@@ -35,7 +35,7 @@ Visualization Manager:
       Value: true
     - Alpha: 1
       Class: rviz/RobotModel
-      Collision Enabled: true
+      Collision Enabled: false
       Enabled: true
       Links:
         All Links Enabled: true
@@ -441,6 +441,30 @@ Visualization Manager:
       Topic: /move_base/current_goal
       Unreliable: false
       Value: true
+    - Class: rviz/Marker
+      Enabled: true
+      Marker Topic: /current_goal_marker
+      Name: Marker
+      Namespaces:
+        corridor_entrance: true
+      Queue Size: 100
+      Value: true
+    - Class: rviz/MarkerArray
+      Enabled: true
+      Marker Topic: /forbidden_zone_markers
+      Name: MarkerArray
+      Namespaces:
+        {}
+      Queue Size: 100
+      Value: true
+    - Class: rviz/MarkerArray
+      Enabled: true
+      Marker Topic: /frontier_markers
+      Name: MarkerArray
+      Namespaces:
+        {}
+      Queue Size: 100
+      Value: true
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48
@@ -464,7 +488,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 10.98694896697998
+      Distance: 13.661161422729492
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -472,9 +496,9 @@ Visualization Manager:
         Value: false
       Field of View: 0.7850000262260437
       Focal Point:
-        X: -0.21713419258594513
-        Y: 4.163931369781494
-        Z: 0.11112573742866516
+        X: -0.6626492738723755
+        Y: 4.036569595336914
+        Z: 0.028903383761644363
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
@@ -482,7 +506,7 @@ Visualization Manager:
       Near Clip Distance: 0.009999999776482582
       Pitch: 1.5697963237762451
       Target Frame: base
-      Yaw: 0.01996982842683792
+      Yaw: 6.273161888122559
     Saved: ~
 Window Geometry:
   Displays:
@@ -490,11 +514,11 @@ Window Geometry:
   Height: 716
   Hide Left Dock: false
   Hide Right Dock: false
-  QMainWindow State: 000000ff00000000fd00000002000000000000015600000239fc0200000002fb000000100044006900730070006c006100790073010000003b00000239000000c700fffffffb0000000a005600690065007700730000000160000000e4000000a000ffffff000000030000050400000037fc0100000001fb0000000800540069006d00650100000000000005040000030700ffffff000003a80000023900000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
+  QMainWindow State: 000000ff00000000fd00000002000000000000015600000233fc0200000002fb000000100044006900730070006c006100790073010000003d00000233000000c900fffffffb0000000a005600690065007700730000000160000000e4000000a400ffffff000000030000050400000039fc0100000001fb0000000800540069006d0065010000000000000504000003bc00ffffff000003a80000023300000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
   Time:
     collapsed: false
   Views:
     collapsed: false
   Width: 1284
-  X: -14
-  Y: -3
+  X: 15
+  Y: 20

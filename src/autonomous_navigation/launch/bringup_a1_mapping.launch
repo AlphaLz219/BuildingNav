@@ -24,13 +24,19 @@
   <arg name="rviz" default="true"/>
   <arg name="load_state" default="" doc="加载已保存的走廊状态文件路径（留空则从头开始）"/>
 
+  <!-- 仿真环境下使用 Gazebo sim time，保证 scan 与 TF 时间戳一致 -->
+  <param name="/use_sim_time" value="true"/>
+
   <!-- ============= 1. 水平激光坐标系 ============= -->
   <!-- Livox Mid-360 安装在 base 上，倾斜 45°（rpy 0 0.785 0）。
        创建水平虚拟坐标系 laser_livox_level，位于 Livox 相同位置但无倾斜，
        确保 pointcloud_to_laserscan 投影面严格水平。 -->
-  <node pkg="tf" type="static_transform_publisher"
+  <!-- 静态变换：tf2_ros 的 static_transform_publisher 不带周期参数时
+       发布到 /tf_static 并保持运行（tf 包的同名节点会发一次后退出）。
+       这样 hector_mapping 在任何时间戳查 map→laser_livox_level 都不会失败。 -->
+  <node pkg="tf2_ros" type="static_transform_publisher"
         name="laser_livox_level_tf"
-        args="0.2 0 0.08 0 0 0 base laser_livox_level 100"/>
+        args="0.2 0 0.08 0 0 0 base laser_livox_level"/>
 
   <!-- ============= 2. PointCloud2 → 2D LaserScan ============= -->
   <!-- 将 pointcloud2livox.py 输出的 PointCloud2 转换为 2D LaserScan，
@@ -54,6 +60,10 @@
   </node>
 
   <!-- ============= 3. Known-Pose Mapping 节点 ============= -->
+  <!-- 原 known_pose_mapper.py 已停用，改用 hector_mapping 的 known-pose 模式：
+       直接用 state_from_gazebo 发布的真值 TF 位姿建图，不做 scan matching，
+       且不发布任何 TF，避免与 state_from_gazebo 冲突。 -->
+  <!--
   <node pkg="autonomous_navigation" type="known_pose_mapper.py"
         name="known_pose_mapper" output="screen">
     <param name="resolution"    value="0.05"/>
@@ -62,6 +72,36 @@
     <param name="publish_rate"  value="2.0"/>
     <param name="laser_frame"   value="laser_livox_level"/>
     <param name="map_frame"     value="map"/>
+  </node>
+  -->
+
+  <!-- hector_mapping known-pose 建图 -->
+  <node pkg="hector_mapping" type="hector_mapping" name="hector_mapping" output="screen">
+    <param name="scan_topic" value="/scan_2d"/>
+    <param name="map_frame"  value="map"/>
+    <param name="base_frame" value="base"/>
+    <param name="odom_frame" value="odom"/>
+
+    <!-- known-pose：直接用 TF 真值位姿建图，跳过 scan matching -->
+    <param name="use_tf_scan_transformation" value="true"/>
+    <param name="use_tf_pose_start_estimate" value="true"/>
+    <param name="map_with_known_poses" value="true"/>
+
+    <!-- 不发布任何 TF，避免与 state_from_gazebo 冲突 -->
+    <param name="pub_map_odom_transform" value="false"/>
+    <param name="pub_map_scanmatch_transform" value="false"/>
+
+    <!-- 地图参数：40m×40m @ 0.05。
+         map_start_x/y 是世界原点在地图网格中的归一化位置(0~1)。
+         0.5 = 世界原点在地图中心(第400像素)，机器人向四周[-20m,+20m]都能建图。
+         0.0 = 世界原点在地图左下角(第0像素)，机器人只能向右上方建图。 -->
+    <param name="map_resolution" value="0.05"/>
+    <param name="map_size" value="800"/>
+    <param name="map_start_x" value="0.5"/>
+    <param name="map_start_y" value="0.5"/>
+    <param name="map_pub_period" value="0.5"/>
+    <param name="map_update_distance_thresh" value="0.1"/>
+    <param name="map_update_angle_thresh" value="0.1"/>
   </node>
 
   <!-- ============= 4. Move Base 导航 ============= -->

@@ -1,0 +1,1 @@
+# 排除编译：依赖 move_base_msgs（ROS navigation），BuildingNav 不需要

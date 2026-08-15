@@ -39,15 +39,19 @@ class KnownPoseMapper:
         self.map_frame = rospy.get_param('~map_frame', 'map')
 
         # log-odds 参数
-        self.l_free = rospy.get_param('~l_free', -0.4)     # 每次穿过的 log-odds 减量
-        self.l_occ = rospy.get_param('~l_occ', 0.85)       # 每次命中的 log-odds 增量
+        self.l_free = rospy.get_param('~l_free', -0.25)    # 每次穿过的 log-odds 减量（更保守，减少对障碍物的侵蚀）
+        self.l_occ = rospy.get_param('~l_occ', 1.2)        # 每次命中的 log-odds 增量（更强，单点即稳定占用）
         self.l_prior = rospy.get_param('~l_prior', 0.0)    # 先验 log-odds（未知）
         self.l_min = rospy.get_param('~l_min', -5.0)       # log-odds 下限
         self.l_max = rospy.get_param('~l_max', 5.0)        # log-odds 上限
+        self.max_range = rospy.get_param('~max_range', 12.0)          # 射线最大有效距离(m)
+        self.min_occ_dist = rospy.get_param('~min_occ_dist', 0.15)    # 终点过近阈值(m)，避免机器人脚下标 occ
+        self.occ_block_thresh = rospy.get_param('~occ_block_thresh', 2.0)  # free 射线被占据格阻挡的 log-odds 阈值
 
         # 内部状态
         self.log_odds = np.full(
             (self.map_height, self.map_width), self.l_prior, dtype=np.float32)
+        self.visited = np.zeros((self.map_height, self.map_width), dtype=bool)
         self.map_origin_x = -(self.map_width * self.resolution) / 2.0
         self.map_origin_y = -(self.map_height * self.resolution) / 2.0
 
@@ -100,13 +104,15 @@ class KnownPoseMapper:
         s_row = int((sy - self.map_origin_y) / self.resolution)
 
         # 逐条射线投射
-        angle = scan.angle_min
         for i in range(len(scan.ranges)):
             r = scan.ranges[i]
-            angle += scan.angle_increment if i > 0 else 0.0
+            angle = scan.angle_min + i * scan.angle_increment
 
-            # 跳过无效测量
-            if r < scan.range_min or r > scan.range_max or not np.isfinite(r):
+            # 跳过无效测量 / 超远点
+            if r < scan.range_min or r > min(scan.range_max, self.max_range) or not np.isfinite(r):
+                continue
+            # 过近的终点不标 occupied，避免把机器人脚下标成障碍
+            if r < self.min_occ_dist:
                 continue
 
             # 射线终点（世界坐标）
@@ -117,40 +123,46 @@ class KnownPoseMapper:
             e_col = int((ex - self.map_origin_x) / self.resolution)
             e_row = int((ey - self.map_origin_y) / self.resolution)
 
-            # Bresenham 光线投射：穿过的格子标记为 free
-            self._bresenham_ray(s_col, s_row, e_col, e_row)
+            # Bresenham 光线投射：穿过的格子标记为 free；被占据格挡住则提前停止
+            blocked = self._bresenham_ray(s_col, s_row, e_col, e_row)
 
-            # 终点标记为 occupied
-            if (0 <= e_row < self.map_height and 0 <= e_col < self.map_width):
+            # 终点标记为 occupied（射线未被遮挡时才标）
+            if not blocked and (0 <= e_row < self.map_height and 0 <= e_col < self.map_width):
                 self.log_odds[e_row, e_col] = np.clip(
                     self.log_odds[e_row, e_col] + self.l_occ,
                     self.l_min, self.l_max)
+                self.visited[e_row, e_col] = True
 
         self._dirty = True
 
     def _bresenham_ray(self, x0, y0, x1, y1):
-        """Bresenham 光线投射：将穿过的格子标记为 free（不含终点）"""
+        """Bresenham 光线投射：将穿过的格子标记为 free（不含起点和终点）。
+
+        若途中遇到已确信占据的格子，说明射线被障碍物挡住，提前终止并返回 True。
+        返回 True 表示射线被遮挡（调用方不应再标终点 occupied）。
+        """
         dx = abs(x1 - x0)
         dy = abs(y1 - y0)
         sx = 1 if x0 < x1 else -1
         sy = 1 if y0 < y1 else -1
         err = dx - dy
+        first = True
 
-        # 不包含起点（传感器位置）和终点（命中点）
-        steps = 0
-        max_steps = int(np.sqrt(dx * dx + dy * dy)) + 2
-
-        while steps < max_steps:
+        while True:
             if x0 == x1 and y0 == y1:
-                break
+                return False
 
-            # 跳过起点
-            if steps > 0:
+            if not first:  # 跳过起点
                 if 0 <= y0 < self.map_height and 0 <= x0 < self.map_width:
+                    # 已被占据：射线被挡住，停止继续标 free
+                    if self.log_odds[y0, x0] >= self.occ_block_thresh:
+                        return True
                     self.log_odds[y0, x0] = np.clip(
                         self.log_odds[y0, x0] + self.l_free,
                         self.l_min, self.l_max)
+                    self.visited[y0, x0] = True
 
+            first = False
             e2 = 2 * err
             if e2 > -dy:
                 err -= dy
@@ -158,7 +170,6 @@ class KnownPoseMapper:
             if e2 < dx:
                 err += dx
                 y0 += sy
-            steps += 1
 
     def _log_odds_to_prob(self, l):
         """log-odds → 占用概率"""
@@ -182,12 +193,12 @@ class KnownPoseMapper:
         grid.info.origin.orientation.w = 1.0
 
         # log-odds → OccupancyGrid 值 (0=free, 100=occupied, -1=unknown)
-        prob = self._log_odds_to_prob(self.log_odds)
-        # 概率 → 0~100
-        occ_values = np.clip((prob * 100).astype(np.int8), 0, 100)
-        # 先验区域（未被观测过）标记为 -1 (unknown)
-        unknown_mask = np.abs(self.log_odds - self.l_prior) < 0.01
-        occ_values[unknown_mask] = -1
+        # 只对观测过的格子计算，其余保持 -1，避免每帧全图 exp 运算
+        occ_values = np.full((self.map_height, self.map_width), -1, dtype=np.int8)
+        if self.visited.any():
+            prob = self._log_odds_to_prob(self.log_odds[self.visited])
+            occ_values[self.visited] = np.clip(
+                (prob * 100).astype(np.int8), 0, 100)
 
         grid.data = occ_values.flatten().tolist()
         self.map_pub.publish(grid)
@@ -196,6 +207,7 @@ class KnownPoseMapper:
     def _reset_callback(self, req):
         """清空地图，重置为先验状态（多楼层切换时调用）"""
         self.log_odds[:] = self.l_prior
+        self.visited[:] = False
         self._dirty = True
         rospy.loginfo("[KnownPoseMapper] ✓ 地图已清空")
         return EmptyResponse()
