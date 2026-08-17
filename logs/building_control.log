@@ -1,1 +1,9 @@
-[INFO] [1786780016.721405, 0.698000]: building_generator_classic_control ready
+[WARN] [1786951835.844840, 0.000000]: wait_for_service(/gazebo/get_model_state): failed to contact, will keep trying
+Traceback (most recent call last):
+  File "/home/lab/rosProject/BuildingNav/src/building_generator_classic/scripts/building_generator_classic_control", line 7, in <module>
+    raise SystemExit(main())
+  File "/home/lab/rosProject/BuildingNav/src/building_generator_classic/building_generator_classic/control_server.py", line 34, in main
+    rospy.wait_for_service("/gazebo/get_model_state")
+  File "/opt/ros/noetic/lib/python3/dist-packages/rospy/impl/tcpros_service.py", line 166, in wait_for_service
+    raise ROSInterruptException("rospy shutdown")
+rospy.exceptions.ROSInterruptException: rospy shutdown
