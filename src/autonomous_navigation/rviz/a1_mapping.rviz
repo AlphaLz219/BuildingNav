@@ -15,7 +15,7 @@ Panels:
   - Class: rviz/Time
     Name: Time
     SyncMode: 0
-    SyncSource: LaserScan (/scan_2d)
+    SyncSource: LaserScan (/scan)
 Preferences:
   PromptSaveOnExit: true
 Toolbars:
@@ -317,46 +317,18 @@ Visualization Manager:
       Invert Rainbow: false
       Max Color: 255; 255; 255
       Min Color: 0; 0; 0
-      Name: LaserScan (/scan_2d)
+      Name: LaserScan (/scan)
       Position Transformer: XYZ
       Queue Size: 10
       Selectable: true
       Size (Pixels): 3
       Size (m): 0.05000000074505806
       Style: Flat Squares
-      Topic: /scan_2d
+      Topic: /scan
       Unreliable: false
       Use Fixed Frame: true
       Use rainbow: true
       Value: true
-    - Alpha: 1
-      Autocompute Intensity Bounds: true
-      Autocompute Value Bounds:
-        Max Value: 5.039947032928467
-        Min Value: -0.01960851065814495
-        Value: true
-      Axis: Z
-      Channel Name: intensity
-      Class: rviz/PointCloud2
-      Color: 255; 255; 255
-      Color Transformer: AxisColor
-      Decay Time: 0
-      Enabled: false
-      Invert Rainbow: false
-      Max Color: 255; 255; 255
-      Min Color: 0; 0; 0
-      Name: PointCloud2 (/livox)
-      Position Transformer: XYZ
-      Queue Size: 10
-      Selectable: true
-      Size (Pixels): 2
-      Size (m): 0.029999999329447746
-      Style: Points
-      Topic: /livox/Pointcloud2
-      Unreliable: false
-      Use Fixed Frame: true
-      Use rainbow: true
-      Value: false
     - Alpha: 0.5
       Class: rviz/Map
       Color Scheme: costmap
@@ -447,6 +419,8 @@ Visualization Manager:
       Name: Marker
       Namespaces:
         corridor_entrance: true
+        elevator: true
+        stairs: true
       Queue Size: 100
       Value: true
     - Class: rviz/MarkerArray
@@ -454,7 +428,7 @@ Visualization Manager:
       Marker Topic: /forbidden_zone_markers
       Name: MarkerArray
       Namespaces:
-        {}
+        forbidden_zones: true
       Queue Size: 100
       Value: true
     - Class: rviz/MarkerArray
@@ -488,7 +462,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 13.661161422729492
+      Distance: 22.925931930541992
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -504,9 +478,9 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 1.5697963237762451
+      Pitch: 1.5597963333129883
       Target Frame: base
-      Yaw: 6.273161888122559
+      Yaw: 6.268161773681641
     Saved: ~
 Window Geometry:
   Displays:
@@ -521,4 +495,4 @@ Window Geometry:
     collapsed: false
   Width: 1284
   X: 15
-  Y: 20
+  Y: 0

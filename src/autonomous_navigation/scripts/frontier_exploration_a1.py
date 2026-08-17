@@ -703,7 +703,7 @@ class FrontierExplorer:
         self.last_stale_check_time = None
         rospy.loginfo("[前沿探索] 已取消当前导航目标")
 
-    def _navigate_to(self, x, y, timeout=60.0):
+    def _navigate_to(self, x, y, timeout=120.0):
         """
         通过 move_base 定点导航到 (x,y)，等待到达或超时。
 
@@ -2836,7 +2836,7 @@ class FrontierExplorer:
                 target_y = self.saved_corridor_end_y - corridor_len / 4.0
                 rospy.loginfo("[前沿探索] 🚀 导航到走廊末1/4处 (0.00, %.2f) corridor_len=%.2fm",
                               target_y, corridor_len)
-                self._navigate_to(0.0, target_y, timeout=60.0)
+                self._navigate_to(0.0, target_y, timeout=120.0)
             if self.init_pause_enabled:
                 rospy.loginfo("[前沿探索] ⏸ 调试暂停...")
                 rx, ry, _ = self._get_robot_pose()
@@ -2880,9 +2880,9 @@ class FrontierExplorer:
                 self._navigate_to(rx, target_y, timeout=30.0)
 
         # ── 第三阶段：深入区域旋转扫描 （暂不开启）──
-        if self.init_rotate_enabled:
-            rospy.loginfo("[前沿探索] 🔄 第三阶段：深入后30°旋转扫描...")
-            self._wiggle_scan()
+        # if self.init_rotate_enabled:
+        #     rospy.loginfo("[前沿探索] 🔄 第三阶段：深入后30°旋转扫描...")
+        #     self._wiggle_scan()
 
         # ── 第四阶段：检测走廊入口 → 定点导航到入口前 → 再扫描 ──
         rospy.loginfo("[前沿探索] 🔍 检测走廊入口...")
@@ -2902,7 +2902,7 @@ class FrontierExplorer:
                     if self._navigate_to(entrance_x, target_y, timeout=40.0):
                         if self.init_rotate_enabled:
                             rospy.loginfo(
-                                "[前沿探索] 🔄 第四阶段：入口前旋转扫描...")
+                                "[前沿探索] 🔄 第四阶段：入口前扫描...")
                             self._wiggle_scan()
                         # 重新检测（更精确）
                         old_entrance_x = entrance_x
@@ -2948,7 +2948,7 @@ class FrontierExplorer:
         else:
             rospy.loginfo("[走廊检测] 未检测到走廊入口，跳过第四阶段")
 
-        # ── 楼梯/电梯检测 ──
+        # ── 楼梯/电梯检测 → 走廊深入──
         if entrance_y is not None:
             rospy.loginfo("[前沿探索] 🔍 检测楼梯和电梯...")
             self._detect_stair_and_elevator(entrance_y)

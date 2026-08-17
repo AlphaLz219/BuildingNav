@@ -39,7 +39,7 @@ ENABLE_GROUND_TRUTH="$(as_ros_bool "${ENABLE_GROUND_TRUTH:-1}")"
 ENABLE_FOOT_CONTACT_SENSOR="$(as_ros_bool "${ENABLE_FOOT_CONTACT_SENSOR:-0}")"
 ENABLE_FOOT_FORCE_VISUAL="$(as_ros_bool "${ENABLE_FOOT_FORCE_VISUAL:-0}")"
 ENABLE_JOY_NODE="$(as_ros_bool "${ENABLE_JOY_NODE:-0}")"
-ENABLE_POINTCLOUD_CONVERTER="$(as_ros_bool "${ENABLE_POINTCLOUD_CONVERTER:-$ENABLE_LIVOX}")"
+ENABLE_POINTCLOUD_CONVERTER="$(as_ros_bool "${ENABLE_POINTCLOUD_CONVERTER:-0}")"
 POINTCLOUD_USE_GROUND_TRUTH_ODOM="$(as_ros_bool "${POINTCLOUD_USE_GROUND_TRUTH_ODOM:-1}")"
 WRITE_GENERATED_TRUTH_COPY="$(as_ros_bool "${WRITE_GENERATED_TRUTH_COPY:-1}")"
 UNITREE_CTRL_DT="${UNITREE_CTRL_DT:-0.004}"
@@ -51,7 +51,7 @@ GAZEBO_PHYSICS_REAL_TIME_UPDATE_RATE="${GAZEBO_PHYSICS_REAL_TIME_UPDATE_RATE:-50
 GAZEBO_PHYSICS_ODE_ITERS="${GAZEBO_PHYSICS_ODE_ITERS:-40}"
 GAZEBO_PHYSICS_CONTACT_MAX_CORRECTING_VEL="${GAZEBO_PHYSICS_CONTACT_MAX_CORRECTING_VEL:-5.0}"
 ROBOT_X="${ROBOT_X:-0.0}"
-ROBOT_Y="${ROBOT_Y:-0.45}"
+ROBOT_Y="${ROBOT_Y:-0.6}"
 ROBOT_Z="${ROBOT_Z:-0.6}"
 ROBOT_YAW="${ROBOT_YAW:-1.5708}"
 
@@ -291,7 +291,7 @@ fi
 # Wait for Gazebo joint_states + IMU before starting the controller.
 # Without this, junior_ctrl blocks forever on hasFullStateFeedback() because
 # gazebo_ros_control only starts publishing after physics unpauses and runs a few steps.
-wait_for_joint_states 30
+wait_for_joint_states 60
 
 if [ "$START_CONTROLLER" = "1" ]; then
   if [ "$CONTROLLER_FOREGROUND" = "1" ]; then

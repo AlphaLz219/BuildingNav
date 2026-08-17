@@ -38,26 +38,9 @@
         name="laser_livox_level_tf"
         args="0.2 0 0.08 0 0 0 base laser_livox_level"/>
 
-  <!-- ============= 2. PointCloud2 → 2D LaserScan ============= -->
-  <!-- 将 pointcloud2livox.py 输出的 PointCloud2 转换为 2D LaserScan，
-       供 known_pose_mapper 建图使用。 -->
-  <node pkg="pointcloud_to_laserscan" type="pointcloud_to_laserscan_node"
-        name="pointcloud_to_laserscan">
-    <remap from="cloud_in"  to="/livox/Pointcloud2"/>
-    <remap from="scan"      to="/scan_2d"/>
-
-    <param name="target_frame"        value="laser_livox_level"/>
-    <param name="transform_tolerance" value="0.1"/>
-    <!-- 高度过滤：地面上方约 6cm~51cm 捕获墙壁立面 -->
-    <param name="min_height"          value="-0.20"/>
-    <param name="max_height"          value="0.10"/>
-    <param name="angle_min"           value="-3.14159"/>
-    <param name="angle_max"           value="3.14100"/>
-    <param name="angle_increment"     value="0.005812"/>
-    <param name="range_min"           value="0.3"/>
-    <param name="range_max"           value="30.0"/>
-    <param name="concurrency_level"   value="1"/>
-  </node>
+  <!-- ============= 2. LaserScan 直接使用 ============= -->
+  <!-- Gazebo 标准 libgazebo_ros_laser.so 直接发布 /scan (LaserScan)，
+       hector_mapping 直接消费，无需中间转换。 -->
 
   <!-- ============= 3. Known-Pose Mapping 节点 ============= -->
   <!-- 原 known_pose_mapper.py 已停用，改用 hector_mapping 的 known-pose 模式：
@@ -77,7 +60,7 @@
 
   <!-- hector_mapping known-pose 建图 -->
   <node pkg="hector_mapping" type="hector_mapping" name="hector_mapping" output="screen">
-    <param name="scan_topic" value="/scan_2d"/>
+    <param name="scan_topic" value="/scan"/>
     <param name="map_frame"  value="map"/>
     <param name="base_frame" value="base"/>
     <param name="odom_frame" value="odom"/>
@@ -96,7 +79,7 @@
          0.5 = 世界原点在地图中心(第400像素)，机器人向四周[-20m,+20m]都能建图。
          0.0 = 世界原点在地图左下角(第0像素)，机器人只能向右上方建图。 -->
     <param name="map_resolution" value="0.05"/>
-    <param name="map_size" value="800"/>
+    <param name="map_size" value="2048"/>
     <param name="map_start_x" value="0.5"/>
     <param name="map_start_y" value="0.5"/>
     <param name="map_pub_period" value="0.5"/>

@@ -52,7 +52,9 @@
            ENABLE_FOOT_CONTACT_SENSOR:=$(arg enable_foot_contact_sensor)
            ENABLE_FOOT_FORCE_VISUAL:=$(arg enable_foot_force_visual)"/>
 
+    <!-- Delay robot spawn to let Gazebo plugins finish initialization. -->
     <node pkg="gazebo_ros" type="spawn_model" name="urdf_spawner" respawn="false" output="screen"
+              launch-prefix="bash -c 'sleep 6; exec $0 $@'"
               args="-urdf -z $(arg robot_z) -y $(arg robot_y) -x $(arg robot_x) -Y $(arg robot_yaw) -model $(arg rname)_gazebo -param robot_description
                     -J FR_hip_joint -0.35 -J FR_thigh_joint 1.36 -J FR_calf_joint -2.65
                     -J FL_hip_joint 0.35 -J FL_thigh_joint 1.36 -J FL_calf_joint -2.65
@@ -65,8 +67,12 @@
 
     <rosparam file="$(arg dollar)$(arg robot_path)/config/robot_control.yaml" command="load"/>
 
+    <!-- controller_spawner needs gazebo_ros_control plugin to be ready first.
+         Delay start to avoid timeout during Gazebo initialization. -->
     <node pkg="controller_manager" type="spawner" name="controller_spawner" respawn="false"
-           ns="/$(arg rname)_gazebo" args="--timeout $(arg controller_spawner_timeout) joint_state_controller
+           ns="/$(arg rname)_gazebo"
+           launch-prefix="bash -c 'sleep 12; exec $0 $@'"
+           args="--timeout $(arg controller_spawner_timeout) joint_state_controller
           FL_hip_controller FL_thigh_controller FL_calf_controller
           FR_hip_controller FR_thigh_controller FR_calf_controller
           RL_hip_controller RL_thigh_controller RL_calf_controller

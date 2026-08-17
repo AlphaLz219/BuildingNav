@@ -147,7 +147,7 @@
             </visual>
     </link>
     <joint name="laser_livox_joint" type="fixed">
-            <origin xyz="0.2 0 0.08" rpy="0 0.785 0"/>
+            <origin xyz="0.2 0 0.08" rpy="0 0 0"/>
             <parent link="base"/>
             <child link="laser_livox"/>
     </joint>
