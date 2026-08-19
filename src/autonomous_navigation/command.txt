@@ -7,7 +7,7 @@ roslaunch autonomous_navigation exploration.launch
 
 // A1 机器狗
 ./my_auto.sh
-roslaunch autonomous_navigation bringup_a1_mapping.launch
+roslaunch autonomous_navigation bringup_a1_mapping.launch save_state_path:=/home/lab/rosProject/BuildingNav/maps/corridor_state.json
 
 // 调试
 // # 1. 正常启动仿真
@@ -15,9 +15,6 @@ roslaunch autonomous_navigation bringup_tb3_mid360_toolbox.launch
 
 # 2. 启动探索（带保存）
 roslaunch autonomous_navigation exploration.launch  save_state_path:=/home/lab/rosProject/BuildingNav/maps/corridor_state.json
-
-# 3. 流程跑完后，另开终端保存地图
-rosrun map_server map_saver -f ~/rosProject/BuildingNav/maps/corridor_map
 
 # 后续调试（跳过初始扫描，秒进）：
 roslaunch autonomous_navigation exploration.launch load_state_path:=/home/lab/rosProject/BuildingNav/maps/corridor_state.json

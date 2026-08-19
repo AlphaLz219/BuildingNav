@@ -5,7 +5,7 @@
 =========================================
 
 功能流程：
-  1. 订阅 SLAM Toolbox 发布的 /map（OccupancyGrid）
+  1. 订阅 hector_mapping 发布的 /map（OccupancyGrid）
   2. 检测前沿 —— 已知自由空间与未知空间的交界
   3. 对前沿点做连通域聚类，过滤噪声小簇
   4. 用比值法评分（Score = Gain / (Cost + epsilon)）选出最优前沿簇
@@ -34,6 +34,7 @@ from geometry_msgs.msg import Point, PoseStamped, Twist
 from std_msgs.msg import ColorRGBA
 from building_generator_interfaces.srv import CallElevator, SetDoorState
 from std_srvs.srv import Empty
+from hector_mapping.srv import ResetMapping, ResetMappingRequest
 
 
 # ═══════════════════════════════════════════════════════════
@@ -93,7 +94,7 @@ class FrontierExplorer:
         # 过时检查频率（秒），独立于重规划周期，可更快响应目标过时
         self.stale_check_interval = rospy.get_param(
             '~stale_check_interval', 2.0)
-        # 重规划前要求 /map 至少更新过一次（避免 SLAM 未就绪时反复重发）
+        # 重规划前要求 /map 至少更新过一次（避免建图未就绪时反复重发）
         self._last_map_stamp = None
 
         # ── 启动前初始化扫描 ──
@@ -162,7 +163,7 @@ class FrontierExplorer:
         self.floor_elevator_center = {}  # {floor: (ex, ey)} 各楼层地图帧中的电梯中心
         # ── 帧机制 ──
         # 每层楼的地图帧不同，电梯中心是该帧中的固定锚点。
-        # 切换楼层时调用 /known_pose_mapper/reset 清空地图，
+        # 切换楼层时调用 /restart_mapping_with_new_pose 清空地图，
         # 再按"两帧电梯中心之差"平移共享坐标。
         self.room_positions = []       # [(center_x, center_y, side, y_bottom, y_top), ...]
         # 持久化字段（从文件加载时填充）
@@ -200,16 +201,16 @@ class FrontierExplorer:
             '/set_door_state', SetDoorState)
         rospy.loginfo("[前沿探索] /set_door_state 已连接")
 
-        # Known-Pose Mapper 重置服务（多楼层切换时清空地图）
+        # hector_mapping 重置服务（多楼层切换时清空地图）
         self._mapper_reset_srv = None
         try:
-            rospy.loginfo("[会话] 等待 /known_pose_mapper/reset 服务...")
-            rospy.wait_for_service('/known_pose_mapper/reset', timeout=5.0)
+            rospy.loginfo("[会话] 等待 /restart_mapping_with_new_pose 服务...")
+            rospy.wait_for_service('/restart_mapping_with_new_pose', timeout=5.0)
             self._mapper_reset_srv = rospy.ServiceProxy(
-                '/known_pose_mapper/reset', Empty)
-            rospy.loginfo("[会话] /known_pose_mapper/reset 已连接")
+                '/restart_mapping_with_new_pose', ResetMapping)
+            rospy.loginfo("[会话] /restart_mapping_with_new_pose 已连接")
         except rospy.ROSException:
-            rospy.logwarn("[会话] mapper reset 服务不可用（多楼层切换将不可用）")
+            rospy.logwarn("[会话] hector_mapping reset 服务不可用（多楼层切换将不可用）")
 
         # 发布器 —— 前沿标记可视化（MarkerArray）
         self.marker_pub = rospy.Publisher(
@@ -227,13 +228,13 @@ class FrontierExplorer:
         self.room_marker_pub = rospy.Publisher(
             '/room_scan_markers', MarkerArray, queue_size=1, latch=True)
 
-        # 订阅器 —— SLAM Toolbox 的栅格地图
+        # 订阅器 —— hector_mapping 的栅格地图
         rospy.Subscriber('/map', OccupancyGrid, self._map_callback)
 
     # ────────────── 地图回调 ──────────────
     def _map_callback(self, msg):
         """
-        接收 SLAM Toolbox 发布的栅格地图
+        接收 hector_mapping 发布的栅格地图
 
         OccupancyGrid.data 值含义：
             0   = 自由空间（已探索，可通行）
@@ -252,7 +253,7 @@ class FrontierExplorer:
         raw = np.array(msg.data, dtype=np.int8)
         self.map_data = raw.reshape((self.map_height, self.map_width))
 
-        # 每次地图更新后重新标记禁区，避免被 SLAM 覆盖
+        # 每次地图更新后重新标记禁区，避免被地图更新覆盖
         if self.forbidden_zones:
             self._mark_forbidden_zones()
             self._publish_forbidden_zone_markers()
@@ -679,6 +680,22 @@ class FrontierExplorer:
         goal.target_pose.pose.orientation.z = np.sin(yaw / 2.0)
         goal.target_pose.pose.orientation.w = np.cos(yaw / 2.0)
 
+        # ── 关键：如果目标在身后，先原地转身 ──
+        if robot_x is not None:
+            _, _, robot_yaw = self._get_robot_pose()
+            target_yaw = np.arctan2(y - robot_y, x - robot_x)
+            yaw_diff = target_yaw - robot_yaw
+            # 归一化到 [-π, π]
+            while yaw_diff > np.pi:
+                yaw_diff -= 2.0 * np.pi
+            while yaw_diff < -np.pi:
+                yaw_diff += 2.0 * np.pi
+            # 如果目标在身后（角度差 > 90°），先转身
+            if abs(yaw_diff) > np.pi / 2.0:
+                rospy.loginfo("[前沿探索] 目标在身后 (%.0f°)，先原地转身",
+                            np.degrees(yaw_diff))
+                self._rotate_to_face(x, y, angular_vel=0.8)
+
         rospy.loginfo("[前沿探索] 发送导航目标: (%.2f, %.2f) yaw=%.1f°",
                       x, y, np.degrees(yaw))
         self.ac.send_goal(goal)
@@ -694,7 +711,7 @@ class FrontierExplorer:
     def cancel_goal(self):
         """取消当前导航目标"""
         self.ac.cancel_goal()
-        self._force_stop()
+        # self._force_stop()
         self.is_navigating = False
         self.goal_start_time = None
         self.current_goal_xy = None
@@ -703,34 +720,80 @@ class FrontierExplorer:
         self.last_stale_check_time = None
         rospy.loginfo("[前沿探索] 已取消当前导航目标")
 
-    def _navigate_to(self, x, y, timeout=120.0):
+    def _rotate_recovery_180(self, angular_vel=0.8):
+        """
+        恢复动作：原地旋转 180°（闭环），导航失败后刷新视野 / 解除振荡。
+
+        返回: True=旋转完成, False=超时/失败
+        """
+        robot_x, robot_y, robot_yaw = self._get_robot_pose()
+        if robot_x is None:
+            rospy.logwarn("[恢复] 无法获取机器人位姿，跳过 180° 旋转")
+            return False
+
+        target_yaw = robot_yaw + np.pi
+        rospy.loginfo("[恢复] 🔄 原地旋转 180° 恢复...")
+        return self._rotate_in_place(target_yaw, angular_vel=angular_vel)
+
+    def _navigate_to(self, x, y, timeout=120.0, max_retries=2):
         """
         通过 move_base 定点导航到 (x,y)，等待到达或超时。
 
-        返回: True=到达, False=超时/失败
+        失败/超时后执行恢复动作（原地旋转 180°）并重试：
+          1. 初始尝试 + 最多 max_retries 次重试（默认 2 次重试 → 共 3 次尝试）
+          2. 每次失败/超时先 cancel_goal，再原地旋转 180° 恢复，然后重新发送目标
+          3. 只有重试耗尽仍失败才返回 False
+
+        返回: True=到达, False=重试耗尽仍失败
         """
-        self.send_goal(x, y)
-        rospy.loginfo("[导航] 等待到达 (%.2f, %.2f) 最多 %.0fs ...", x, y, timeout)
-        deadline = rospy.Time.now() + rospy.Duration(timeout)
-        rate = rospy.Rate(5)
-        while not rospy.is_shutdown() and rospy.Time.now() < deadline:
-            state = self.ac.get_state()
-            if state == GoalStatus.SUCCEEDED:
-                rospy.loginfo("[导航] ✓ 已到达 (%.2f, %.2f)", x, y)
-                self.is_navigating = False
-                self.goal_start_time = None
-                self.current_goal_xy = None
+        for attempt in range(max_retries + 1):
+            if attempt > 0:
+                rospy.logwarn(
+                    "[导航] 第 %d/%d 次重试 (%.2f, %.2f)...",
+                    attempt, max_retries, x, y)
+                self._rotate_recovery_180()
+                rospy.sleep(0.5)
+
+            self.send_goal(x, y)
+            rospy.loginfo(
+                "[导航] 等待到达 (%.2f, %.2f) 最多 %.0fs ...", x, y, timeout)
+            deadline = rospy.Time.now() + rospy.Duration(timeout)
+            rate = rospy.Rate(5)
+
+            reached = False
+            failed = False
+            while not rospy.is_shutdown() and rospy.Time.now() < deadline:
+                state = self.ac.get_state()
+                if state == GoalStatus.SUCCEEDED:
+                    rospy.loginfo("[导航] ✓ 已到达 (%.2f, %.2f)", x, y)
+                    reached = True
+                    break
+                elif state in (GoalStatus.ABORTED, GoalStatus.REJECTED,
+                               GoalStatus.PREEMPTED, GoalStatus.LOST):
+                    rospy.logwarn("[导航] ✗ 导航失败 (状态码: %d)", state)
+                    failed = True
+                    break
+                rate.sleep()
+
+            # 清理本次尝试的导航状态
+            self.is_navigating = False
+            self.goal_start_time = None
+            self.current_goal_xy = None
+
+            if reached:
                 return True
-            elif state in (GoalStatus.ABORTED, GoalStatus.REJECTED,
-                           GoalStatus.PREEMPTED, GoalStatus.LOST):
-                rospy.logwarn("[导航] ✗ 导航失败 (状态码: %d)", state)
-                self.is_navigating = False
-                self.goal_start_time = None
-                self.current_goal_xy = None
-                return False
-            rate.sleep()
-        rospy.logwarn("[导航] ⏰ 导航超时")
-        self.cancel_goal()
+
+            # 失败或超时：取消目标，准备恢复重试
+            if failed:
+                rospy.loginfo("[导航] 取消目标，执行 180° 恢复后重试")
+            else:
+                rospy.logwarn("[导航] ⏰ 导航超时 (%.0fs)", timeout)
+            self.cancel_goal()
+            rospy.sleep(0.5)
+
+        rospy.logerr(
+            "[导航] ✗ 重试 %d 次仍失败，未到达 (%.2f, %.2f)",
+            max_retries, x, y)
         return False
 
     def _force_stop(self):
@@ -773,7 +836,7 @@ class FrontierExplorer:
         到达目标后原地旋转 360° 扫描周围环境。
 
         move_base 导航成功时已自动停稳，直接发布旋转指令即可。
-        SLAM Toolbox 在旋转过程中会持续更新地图。
+        hector_mapping 在旋转过程中会持续更新地图。
 
         参数:
             angular_vel: 旋转角速度 (rad/s)，默认 0.5，约 12.6s 完成一圈
@@ -793,7 +856,7 @@ class FrontierExplorer:
 
         # 停止旋转
         self.cmd_vel_pub.publish(Twist())
-        rospy.sleep(0.3)  # 等待停稳 + SLAM 最后一次更新
+        rospy.sleep(0.3)  # 等待停稳 + 地图最后一次更新
         rospy.loginfo("[前沿探索] ✓ 旋转扫描完成")
 
     def _wiggle_scan(self, angle=30.0, angular_vel=1.2):
@@ -801,7 +864,7 @@ class FrontierExplorer:
         左右快速摆头扫描，让 LiDAR 从多个角度观察前方墙壁。
 
         相比 360° 旋转（~8s），摆头只需约 1.5s，大幅加速。
-        摆头后 SLAM 能更准确地注册前方障碍物。
+        摆头后建图能更准确地注册前方障碍物。
 
         参数:
             angle:       左右摆角（度），默认 ±30°
@@ -1692,28 +1755,95 @@ class FrontierExplorer:
             rospy.logwarn("[电梯] 服务调用失败: %s", e)
             return False
 
+    def _rotate_in_place(self, target_yaw, angular_vel=0.8, timeout=15.0):
+        """
+        原地旋转到指定绝对朝向（闭环，基于 TF 实时反馈）。
+
+        每帧读取 map→base 实际朝向，直到进入容差才停止；
+        接近目标时降低角速度防止过冲；带总超时保护。
+
+        参数:
+            target_yaw:  目标绝对朝向（rad，map 坐标系）
+            angular_vel: 旋转角速度 (rad/s)
+            timeout:     总超时（秒），超时仍未到位返回 False
+
+        返回: True=旋转到位, False=超时/无法获取位姿
+        """
+        # 归一化目标朝向到 [-π, π]
+        while target_yaw > np.pi:
+            target_yaw -= 2.0 * np.pi
+        while target_yaw < -np.pi:
+            target_yaw += 2.0 * np.pi
+
+        start = rospy.Time.now()
+        rate = rospy.Rate(20)
+
+        while not rospy.is_shutdown():
+            robot_x, robot_y, robot_yaw = self._get_robot_pose()
+            if robot_x is None:
+                rospy.logwarn("[朝向] 无法获取机器人位姿，跳过旋转")
+                self.cmd_vel_pub.publish(Twist())
+                return False
+
+            # 计算当前角度差（归一化）
+            yaw_diff = target_yaw - robot_yaw
+            while yaw_diff > np.pi:
+                yaw_diff -= 2.0 * np.pi
+            while yaw_diff < -np.pi:
+                yaw_diff += 2.0 * np.pi
+
+            # 到位判定（5° 容差）
+            if abs(yaw_diff) < np.radians(5.0):
+                self.cmd_vel_pub.publish(Twist())
+                rospy.loginfo(
+                    "[朝向] ✓ 旋转到位 (误差 %.1f°)", np.degrees(yaw_diff))
+                return True
+
+            # 接近目标时减速，防止过冲
+            vel = angular_vel
+            if abs(yaw_diff) < np.radians(15.0):
+                vel = 0.3
+            cmd = Twist()
+            cmd.angular.z = vel if yaw_diff > 0 else -vel
+            self.cmd_vel_pub.publish(cmd)
+
+            # 总超时保护
+            if (rospy.Time.now() - start).to_sec() > timeout:
+                rospy.logwarn(
+                    "[朝向] ⏰ 旋转超时 (%ds)，当前误差 %.1f°",
+                    timeout, np.degrees(yaw_diff))
+                self.cmd_vel_pub.publish(Twist())
+                return False
+
+            rate.sleep()
+
+        self.cmd_vel_pub.publish(Twist())
+        return False
+
     def _rotate_to_face(self, target_x, target_y, angular_vel=0.8):
         """
-        旋转机器人使其朝向目标点。
+        旋转机器人使其朝向目标点（闭环）。
 
-        计算目标点相对于机器人的方位角，然后旋转到该方向。
+        计算目标点相对于机器人的方位角，然后闭环旋转到该方向。
 
         参数:
             target_x: 目标点 x 坐标
             target_y: 目标点 y 坐标
             angular_vel: 旋转角速度 (rad/s)
+
+        返回: True=已朝向目标, False=旋转超时
         """
-        robot_x, robot_y, robot_yaw = self._get_robot_pose()
+        robot_x, robot_y, _ = self._get_robot_pose()
         if robot_x is None:
             rospy.logwarn("[朝向] 无法获取机器人位姿")
-            return
+            return False
 
         # 计算目标方位角
         target_yaw = np.arctan2(target_y - robot_y, target_x - robot_x)
 
-        # 计算需要旋转的角度差
+        # 当前朝向
+        _, _, robot_yaw = self._get_robot_pose()
         yaw_diff = target_yaw - robot_yaw
-        # 归一化到 [-π, π]
         while yaw_diff > np.pi:
             yaw_diff -= 2.0 * np.pi
         while yaw_diff < -np.pi:
@@ -1726,27 +1856,10 @@ class FrontierExplorer:
         # 如果角度差很小，不需要旋转
         if abs(yaw_diff) < np.radians(5.0):
             rospy.loginfo("[朝向] 已经朝向目标，跳过旋转")
-            return
+            return True
 
-        # 执行旋转
-        rotation_time = abs(yaw_diff) / abs(angular_vel)
-        direction = 1.0 if yaw_diff > 0 else -1.0
-
-        rospy.loginfo("[朝向] 旋转 %.1f° (%.1fs)...", np.degrees(yaw_diff), rotation_time)
-
-        cmd = Twist()
-        cmd.angular.z = direction * angular_vel
-
-        start = rospy.Time.now()
-        rate = rospy.Rate(20)
-        while (rospy.Time.now() - start).to_sec() < rotation_time:
-            self.cmd_vel_pub.publish(cmd)
-            rate.sleep()
-
-        # 停止
-        self.cmd_vel_pub.publish(Twist())
-        rospy.sleep(0.3)
-        rospy.loginfo("[朝向] ✓ 旋转完成")
+        rospy.loginfo("[朝向] 原地旋转 %.1f°...", np.degrees(yaw_diff))
+        return self._rotate_in_place(target_yaw, angular_vel=angular_vel)
 
     def _measure_free_distance(self, direction_x, direction_y, max_dist=5.0):
         """
@@ -1800,21 +1913,25 @@ class FrontierExplorer:
             direction_x, direction_y, dist)
         return dist
 
-    # ────────────── 多楼层 SLAM 会话管理 ──────────────
+    # ────────────── 多楼层 hector_mapping 会话管理 ──────────────
     def _reset_mapper(self):
         """
-        调用 /known_pose_mapper/reset 清空地图，用于多楼层切换。
+        调用 /restart_mapping_with_new_pose 清空地图，用于多楼层切换。
 
-        清空后 known_pose_mapper 从零开始重建新楼层地图。
+        清空后 hector_mapping 从零开始重建新楼层地图。
         由于使用 Gazebo 真值定位，机器人在新地图中的位置由 TF 自动确定。
         返回: True 成功, False 失败
         """
         if self._mapper_reset_srv is None:
-            rospy.logwarn("[会话] mapper reset 服务不可用，跳过")
+            rospy.logwarn("[会话] hector_mapping reset 服务不可用，跳过")
             return False
         try:
-            self._mapper_reset_srv()
-            rospy.loginfo("[会话] ✓ known_pose_mapper 已清空")
+            from geometry_msgs.msg import Pose
+            req = ResetMappingRequest()
+            req.initial_pose = Pose()
+            req.initial_pose.orientation.w = 1.0
+            self._mapper_reset_srv(req)
+            rospy.loginfo("[会话] ✓ hector_mapping 已清空")
             # 等待新地图发布
             self.map_data = None
             deadline = rospy.Time.now() + rospy.Duration(10.0)
@@ -1911,7 +2028,7 @@ class FrontierExplorer:
 
         锚点 = 两帧中的电梯中心之差。电梯中心记录于 floor_elevator_center：
           - 启动楼层：实测 (ex, ey)
-          - 首次访问的楼层：重启 SLAM 后实测机器人在新地图中的位置
+          - 首次访问的楼层：重启建图后实测机器人在新地图中的位置
           - 返回的楼层：deserialize 后即记录值
         平移后更新 self.elevator_center 为目标帧值。
         """
@@ -1938,7 +2055,7 @@ class FrontierExplorer:
         """
         切换到目标楼层（电梯内、开门前调用）。
 
-        Known-Pose Mapping 方案下，楼层切换很简单：
+        hector_mapping known-pose 方案下，楼层切换很简单：
           1. 记录当前楼层电梯中心
           2. 清空 mapper（开始新楼层建图）
           3. 实测新地图中机器人位置作为该楼层电梯中心
@@ -2053,7 +2170,7 @@ class FrontierExplorer:
 
         # ── 5. 前进 1m 进入电梯 ──
         rospy.loginfo("[电梯] ⑥ 前进 1m 进入电梯...")
-        self._move_forward(1.0, speed=0.12)
+        self._move_forward(3.0, speed=0.3)
 
         # ── 6. 导航到电梯中心 ──
         rospy.loginfo("[电梯] ⑦ 导航到电梯中心 (%.2f, %.2f)...", ex, ey)
@@ -2077,7 +2194,7 @@ class FrontierExplorer:
         rospy.loginfo("[电梯] 运行中...")
         rospy.sleep(2.0)  # 模拟电梯运行时间
 
-        # ── 9b. 切换目标楼层 SLAM 会话（开门前，电梯内）──
+        # ── 9b. 切换目标楼层建图会话（开门前，电梯内）──
         # 机器人在电梯中心，朝向 +x（进入电梯时的朝向）；
         # 初始位姿用目标楼层地图帧中的电梯中心坐标
         t_ex, t_ey = self._floor_elevator_center(to_floor)
@@ -2125,7 +2242,7 @@ class FrontierExplorer:
         """
         手动更新地图 + 清除 move_base 代价地图，让导航能穿过电梯门。
 
-        问题：电梯门打开后，SLAM 地图和 move_base 代价地图都不会自动更新，
+        问题：电梯门打开后，地图和 move_base 代价地图都不会自动更新，
         门区域仍显示为障碍物，导致 move_base 无法规划路径。
 
         解决：
@@ -2612,7 +2729,7 @@ class FrontierExplorer:
         self.room_positions.sort(key=lambda r: r[1], reverse=True)
         rospy.loginfo("[房间估计] ====== 估计完毕 ======")
 
-    # ────────────── 房间内前沿探索 ──────────────
+    # ────────────── 房间内前沿探索 （暂不使用，后续可改为危险物探测）──────────────
     def _explore_room(self, bounds, max_iterations=20):
         """
         在指定房间边界内运行前沿探索循环。
@@ -2685,7 +2802,7 @@ class FrontierExplorer:
 
         流程：
           1. 导航到走廊门前 (0.0, door_y)
-          2. 导航进入房间 2m
+          2. 导航进入房间 1m
           3. 摆头扫描
           4. 房间内前沿探索直到无前沿
           5. 返回当前房间门口 (0.0, door_y)
@@ -2706,7 +2823,7 @@ class FrontierExplorer:
             key=lambda r: (-r[1], 0 if r[2] == 'left' else 1))
 
         corridor_half_width = 1.1
-        entry_depth = 2.0  # 进入房间的深度
+        entry_depth = 1.0  # 进入房间的深度
 
         rospy.loginfo(
             "[房间扫描] ====== 开始逐门扫描 (共 %d 间) ======",
@@ -2740,7 +2857,7 @@ class FrontierExplorer:
 
             # ── 1. 导航到走廊门前 ──
             rospy.loginfo("[房间扫描] ① 导航到门口 (0.00, %.2f)", door_y)
-            if not self._navigate_to(0.0, door_y, timeout=60.0):
+            if not self._navigate_to(0.0, door_y, timeout=120.0):
                 rospy.logwarn("[房间扫描] 导航到门口失败，跳过此房间")
                 continue
 
@@ -2767,7 +2884,7 @@ class FrontierExplorer:
 
             # ── 5. 返回当前房间门口 ──
             rospy.loginfo("[房间扫描] ⑤ 返回门口 (0.00, %.2f)", door_y)
-            self._navigate_to(0.0, door_y, timeout=60.0)
+            self._navigate_to(0.0, door_y, timeout=30.0)
 
         # ── 全部完成：导航至最后一扇门门口，再导航至电梯，然后乘梯上楼 ──
         if self.elevator_center is not None and last_door_y is not None:
@@ -2776,7 +2893,7 @@ class FrontierExplorer:
                 "[房间扫描] ====== 全部房间扫描完毕 ======")
             rospy.loginfo(
                 "[房间扫描] 导航至最后一扇门门口 (0.00, %.2f)", last_door_y)
-            self._navigate_to(0.0, last_door_y, timeout=60.0)
+            self._navigate_to(0.0, last_door_y, timeout=30.0)
             rospy.loginfo(
                 "[房间扫描] 导航至电梯 (0.00, %.2f)", ey)
             self._navigate_to(0.0, ey, timeout=60.0)
@@ -2836,7 +2953,7 @@ class FrontierExplorer:
                 target_y = self.saved_corridor_end_y - corridor_len / 4.0
                 rospy.loginfo("[前沿探索] 🚀 导航到走廊末1/4处 (0.00, %.2f) corridor_len=%.2fm",
                               target_y, corridor_len)
-                self._navigate_to(0.0, target_y, timeout=120.0)
+                self._navigate_to(0.0, target_y, timeout=2400.0)
             if self.init_pause_enabled:
                 rospy.loginfo("[前沿探索] ⏸ 调试暂停...")
                 rx, ry, _ = self._get_robot_pose()
@@ -2959,7 +3076,7 @@ class FrontierExplorer:
             self._publish_forbidden_zone_markers()
 
             # ── 走廊深入循环：走一段 → 检测尽头 → 未到头则继续走 ──
-            # 必须亲身走过去，SLAM 才能把 -1(未知) 更新为真实的 0/100
+            # 必须亲身走过去，建图才能把 -1(未知) 更新为真实的 0/100
             corridor_end_y = None
             corridor_end_definitive = False
             if self.corridor_entry_depth > 0:
@@ -2997,7 +3114,7 @@ class FrontierExplorer:
                         rospy.logwarn(
                             "[前沿探索] 走廊深入导航失败，停止推进")
                         break
-                    # 摆头扫描：让 LiDAR 多角度观察前方，SLAM 才能
+                    # 摆头扫描：让 LiDAR 多角度观察前方，建图才能
                     # 把墙从未知(-1)正确更新为障碍物(100)
                     self._wiggle_scan()
                 else:
@@ -3007,11 +3124,11 @@ class FrontierExplorer:
 
             # ── 回到走廊 3/4 处：靠近房门群，LiDAR 能更好覆盖门内 ──
             if corridor_end_definitive and corridor_end_y is not None:
-                observe_y = entrance_y + (corridor_end_y - entrance_y) * 0.75
+                observe_y = entrance_y + (corridor_end_y - entrance_y) * 0.8
                 rospy.loginfo(
                     "[前沿探索] 🔄 回走到走廊 3/4 处 (0.00, %.2f) 观察房门...",
                     observe_y)
-                if self._navigate_to(0.0, observe_y, timeout=60.0):
+                if self._navigate_to(0.0, observe_y, timeout=2400.0):
                     self._wiggle_scan()
                     # 复检尽头：从新位置再次确认尽头位置
                     re_end_y, re_def = self._detect_corridor_end(entrance_y)
@@ -3076,57 +3193,6 @@ class FrontierExplorer:
             return  # 节点被关闭，直接返回
 
         rospy.loginfo("[前沿探索] ✓ 初始扫描完成，开始前沿探索")
-
-    # ────────────── 周期性重规划（建图期）──────────────
-    def _maybe_replan(self):
-        """
-        在导航过程中周期性取消并重发同一目标，强制 move_base
-        基于最新 global_costmap 重新调用全局规划器。
-
-        解决：建图探索期 SLAM 地图持续扩展，但 move_base 仅在路径失效
-        时才重规划，导致机器人死守旧路径、无视新发现捷径的问题。
-
-        触发条件：
-          1. replan_interval > 0（功能开启）
-          2. 距上次重规划已超过 replan_interval 秒
-          3. 机器人距目标仍大于 replan_min_dist（避免接近目标时振荡）
-          4. /map 话题有数据（SLAM 正在工作）
-        """
-        if self.replan_interval <= 0.0:
-            return
-        if self.current_goal_xy is None or self.last_replan_time is None:
-            return
-        if self._last_map_stamp is None:
-            return
-
-        now = rospy.Time.now()
-        elapsed = (now - self.last_replan_time).to_sec()
-        if elapsed < self.replan_interval:
-            return
-
-        gx, gy = self.current_goal_xy
-        robot_x, robot_y, _ = self._get_robot_pose()
-        if robot_x is None:
-            return
-
-        dist = np.sqrt((gx - robot_x) ** 2 + (gy - robot_y) ** 2)
-        if dist < self.replan_min_dist:
-            return
-
-        rospy.loginfo(
-            "[前沿探索] ♻ 触发周期性重规划: 距目标 %.2fm, 已导航 %.1fs",
-            dist, (now - self.goal_start_time).to_sec()
-            if self.goal_start_time else 0.0)
-
-        # 取消当前导航
-        self.ac.cancel_goal()
-        # 给 move_base 短暂时间处理 cancel，避免新旧 goal 状态冲突
-        rospy.sleep(0.1)
-
-        # 重发同一目标；send_goal 会重置 last_replan_time
-        self.send_goal(gx, gy)
-        # 重置导航开始时间：超时按"当前段"计算，避免长途导航被误杀
-        self.goal_start_time = rospy.Time.now()
 
     # ────────────── 目标过时检测 ──────────────
     def _check_stale_goal(self):

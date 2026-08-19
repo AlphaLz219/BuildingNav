@@ -8,8 +8,9 @@ global_costmap:
   robot_base_frame: base
 
   update_frequency: 5.0
-  publish_frequency: 2.0
-
+  publish_frequency: 3.0
+  static_map: true        # 新增
+  resolution: 0.05        # 新增
   rolling_window: false
 
   transform_tolerance: 1.0

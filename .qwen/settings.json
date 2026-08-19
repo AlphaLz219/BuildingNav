@@ -9,7 +9,9 @@
       "Bash(rostopic *)",
       "Bash(timeout *)",
       "Bash(rosnode *)",
-      "Bash(rosparam *)"
+      "Bash(rosparam *)",
+      "Read(//opt/ros/noetic/include/hector_mapping/**)",
+      "Read(//opt/ros/noetic/share/hector_mapping/**)"
     ]
   },
   "$version": 4

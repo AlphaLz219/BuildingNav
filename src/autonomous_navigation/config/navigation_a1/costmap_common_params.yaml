@@ -5,7 +5,7 @@
 # ============================================================
 
 # A1 机器狗 footprint（官方参数）
-footprint: [[0.3, 0.15], [0.3, -0.15], [-0.35, -0.15], [-0.35, 0.15]]
+footprint: [[0.2, 0.10], [0.2, -0.10], [-0.35, -0.10], [-0.35, 0.10]]
 
 # 顶层参数作为 obstacle_layer 回退读取的默认值
 obstacle_range: 5.0
@@ -26,13 +26,13 @@ static_layer:
 
 # ---- 障碍层 ----
 obstacle_layer:
-  observation_sources: scan_2d
+  observation_sources: scan
   obstacle_range: 5.0
   raytrace_range: 6.0
 
-  scan_2d:
+  scan:
     data_type: LaserScan
-    topic: /scan_2d
+    topic: /scan
     sensor_model_type: ray
     clearing: true
     marking: true

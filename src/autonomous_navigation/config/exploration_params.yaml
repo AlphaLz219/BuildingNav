@@ -8,7 +8,7 @@
 # 值越小 → 保留更多小前沿（探索细但目标多、效率低）
 min_frontier_size: 20
 
-# 前沿检测频率（Hz），不需要太高，SLAM Toolbox 地图更新约 0.5Hz
+# 前沿检测频率（Hz），不需要太高，hector_mapping 地图更新约 0.5Hz
 detection_frequency: 0.5
 
 # ---- 目标评分（比值法: Score = Gain / (Cost + epsilon)）----
@@ -58,7 +58,7 @@ navigation_timeout: 120.0
 # 建图期周期性重规划间隔（秒）
 # 导航进行中每隔此时间取消并重发同一目标，强制 move_base
 # 基于最新 global_costmap 重新调用全局规划器。
-# 解决 SLAM 地图持续扩展时机器人死守旧路径、无视新捷径的问题。
+# 解决地图持续扩展时机器人死守旧路径、无视新捷径的问题。
 # 设为 0 或负数关闭此功能；过小（<3s）可能造成 cmd_vel 抖动
 replan_interval: 0.0
 
@@ -71,7 +71,7 @@ replan_min_distance: 4.5
 # 值太低容易误判（大房间入口场景），值太高则反应迟钝
 gain_decay_threshold: 0.3
 
-# 距目标小于此距离（米）时才开始检查过时，避免远距离 SLAM 回环误判
+# 距目标小于此距离（米）时才开始检查过时，避免远距离回环误判
 # 约等于激光雷达在建筑内的有效观测半径
 stale_check_distance: 3.0
 
