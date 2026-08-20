@@ -20,6 +20,9 @@ DWAPlannerROS:
   min_in_place_vel_theta: 0.8
   escape_vel: -0.3
 
+  max_vel_trans: 0.50
+  min_vel_trans: 0.0 
+
   # ---- 加速度限制（官方参数）----
   acc_lim_x: 2.5
   acc_lim_y: 0.5
@@ -41,9 +44,9 @@ DWAPlannerROS:
   # score = path_distance_bias × path_dist + goal_distance_bias × goal_dist 
   #                                        + occdist_scale × obstacle_cost
   # 路径跟随权重，适度跟随全局路径
-  path_distance_bias: 1.4
+  path_distance_bias: 24.0
   # 目标趋近权重，更积极地朝目标移动（穿窄道时更有效）
-  goal_distance_bias: 2.8
+  goal_distance_bias: 32.0
   # 障碍物距离权重，适度远离障碍物
   occdist_scale: 0.01
   # 旋转抑制权重，惩罚无意义的原地旋转
@@ -65,7 +68,7 @@ DWAPlannerROS:
 
   # 朝向容忍度（rad），到达目标朝向 ±此角度即认为到位
   # 0.2 rad ≈ 11.5°，对真实机器人来说合理
-  yaw_goal_tolerance: 0.5
+  yaw_goal_tolerance: 3.14
 
   # 【关键】先锁位置再调朝向，避免位姿互扰
   # true = 到达 xy 容忍度后，固定位置只旋转调朝向

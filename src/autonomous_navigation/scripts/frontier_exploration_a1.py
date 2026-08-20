@@ -24,6 +24,7 @@ import actionlib
 import tf
 import json
 import os
+import threading
 
 from nav_msgs.msg import OccupancyGrid
 from nav_msgs.srv import GetPlan, GetPlanRequest
@@ -48,6 +49,7 @@ class FrontierExplorer:
         self._load_params()
         self._init_state()
         self._init_ros_interface()
+        self._load_scene_info()
         rospy.loginfo("[前沿探索] 节点初始化完成，等待地图数据...")
 
     def _load_params(self):
@@ -131,6 +133,46 @@ class FrontierExplorer:
         self.debug_elevator = rospy.get_param('~debug_elevator', False)
         self.target_floor = rospy.get_param('~target_floor', 1)
 
+        # ── 场景信息（比赛允许读取）──
+        self.scene_info_path = rospy.get_param('~scene_info_path', '')
+
+    def _load_scene_info(self):
+        """
+        读取比赛允许的场景信息文件，获取电梯服务楼层。
+
+        从 team_scene_info.json 的 public_scene.elevators[0].served_floors
+        提取最高楼层号，用于多楼层探索循环。
+        """
+        if not self.scene_info_path:
+            rospy.logwarn("[场景] 未配置 scene_info_path，默认单楼层")
+            self.max_floor = self.current_floor
+            return
+
+        # 解析相对路径（相对于工作空间根目录）
+        path = self.scene_info_path
+        if not os.path.isabs(path):
+            workspace = os.environ.get('WORKSPACE_DIR',
+                os.path.dirname(os.path.dirname(os.path.dirname(
+                    os.path.abspath(__file__)))))
+            path = os.path.join(workspace, path)
+
+        try:
+            with open(path, 'r') as f:
+                info = json.load(f)
+            elevators = info.get('public_scene', {}).get('elevators', [])
+            if elevators:
+                served = elevators[0].get('served_floors', [0])
+                self.max_floor = max(served)
+                rospy.loginfo(
+                    "[场景] 建筑共 %d 层 (served_floors=%s, max_floor=%d)",
+                    len(served), served, self.max_floor)
+            else:
+                self.max_floor = self.current_floor
+                rospy.logwarn("[场景] 无电梯信息，默认单楼层")
+        except (IOError, json.JSONDecodeError, KeyError) as e:
+            self.max_floor = self.current_floor
+            rospy.logwarn("[场景] 读取 %s 失败: %s，默认单楼层", path, e)
+
     def _init_state(self):
         """初始化内部状态变量"""
         # 地图相关
@@ -161,6 +203,7 @@ class FrontierExplorer:
         self.stair_center = None       # (sx, sy) 楼梯中心
         self.elevator_center = None    # (ex, ey) 电梯中心（当前楼层地图帧）
         self.floor_elevator_center = {}  # {floor: (ex, ey)} 各楼层地图帧中的电梯中心
+        self.max_floor = 0              # 最高楼层（从 team_scene_info.json 读取）
         # ── 帧机制 ──
         # 每层楼的地图帧不同，电梯中心是该帧中的固定锚点。
         # 切换楼层时调用 /restart_mapping_with_new_pose 清空地图，
@@ -1755,7 +1798,26 @@ class FrontierExplorer:
             rospy.logwarn("[电梯] 服务调用失败: %s", e)
             return False
 
-    def _rotate_in_place(self, target_yaw, angular_vel=0.8, timeout=15.0):
+    def _set_door_async(self, door_id, open):
+        """
+        非阻塞开关门：在后台线程调用关门服务，立即返回。
+
+        用于"关门"场景——机器狗无需等待门完全关闭即可继续移动。
+
+        参数:
+            door_id: 门 ID（如 'elevator_floor_0'）
+            open: True 开门, False 关门
+
+        返回: True（请求已发出）
+        """
+        action = "开门" if open else "关门"
+        rospy.loginfo("[电梯] (异步) %s %s...", action, door_id)
+        t = threading.Thread(
+            target=self._set_door, args=(door_id, open), daemon=True)
+        t.start()
+        return True
+
+    def _rotate_in_place(self, target_yaw, angular_vel=0.8, timeout=8.0):
         """
         原地旋转到指定绝对朝向（闭环，基于 TF 实时反馈）。
 
@@ -2142,7 +2204,7 @@ class FrontierExplorer:
             rospy.logwarn("[电梯] 导航到门前失败，在当前位置继续")
 
         # 等待 Gazebo 物理稳定（防止轮子惯性导致位姿漂移）
-        rospy.sleep(0.5)
+        # rospy.sleep(0.5)
 
         # ── 2. 旋转正朝 +x 方向 ──
         rospy.loginfo("[电梯] ② 旋转正朝 +x 方向...")
@@ -2168,19 +2230,18 @@ class FrontierExplorer:
         if rx2 is not None:
             self._rotate_to_face(rx2 + 1.0, ry2)
 
-        # ── 5. 前进 1m 进入电梯 ──
-        rospy.loginfo("[电梯] ⑥ 前进 1m 进入电梯...")
-        self._move_forward(3.0, speed=0.3)
+        # ── 5. 前进 2m 进入电梯 ──
+        rospy.loginfo("[电梯] ⑥ 前进 2m 进入电梯...")
+        self._move_forward(2.5, speed=0.5)
 
         # ── 6. 导航到电梯中心 ──
         rospy.loginfo("[电梯] ⑦ 导航到电梯中心 (%.2f, %.2f)...", ex, ey)
         if not self._navigate_to(ex, ey, timeout=30.0):
             rospy.logwarn("[电梯] 导航到中心失败，已在电梯内")
 
-        # ── 8. 关门 ──
-        rospy.loginfo("[电梯] ⑧ 关门 %s...", from_door)
-        self._set_door(from_door, False)
-        rospy.sleep(1.0)
+        # ── 8. 关门（非阻塞：后台执行，不等门完全关闭）──
+        rospy.loginfo("[电梯] ⑧ 关门 %s（后台执行，不等待）...", from_door)
+        self._set_door_async(from_door, False)
 
         # ════════════════════════════════════════
         #  电梯运行
@@ -2190,9 +2251,6 @@ class FrontierExplorer:
         if not self._call_elevator('elevator_main', to_floor, False):
             rospy.logerr("[电梯] 呼叫电梯失败")
             return
-
-        rospy.loginfo("[电梯] 运行中...")
-        rospy.sleep(2.0)  # 模拟电梯运行时间
 
         # ── 9b. 切换目标楼层建图会话（开门前，电梯内）──
         # 机器人在电梯中心，朝向 +x（进入电梯时的朝向）；
@@ -2223,7 +2281,7 @@ class FrontierExplorer:
 
         # ── 12. 前进离开电梯 ──
         rospy.loginfo("[电梯] ⑫ 前进 2.5m 离开电梯...")
-        self._move_forward(1.5, speed=0.12)
+        self._move_forward(2.5, speed=0.5)
 
         # ── 13. 导航到走廊 ──
         exit_y = ey + 0.0
@@ -2231,9 +2289,9 @@ class FrontierExplorer:
         if not self._navigate_to(0.0, exit_y, timeout=60.0):
             rospy.logwarn("[电梯] 导航到走廊失败")
 
-        # ── 14. 关门 ──
-        rospy.loginfo("[电梯] ⑭ 关门 %s...", to_door)
-        self._set_door(to_door, False)
+        # ── 14. 关门（非阻塞：后台执行，机器狗直接离开）──
+        rospy.loginfo("[电梯] ⑭ 关门 %s（后台执行，不等待）...", to_door)
+        self._set_door_async(to_door, False)
 
         rospy.loginfo(
             "[电梯] ====== 乘梯完成: 已到达 %d 楼 ======", to_floor)
@@ -2794,11 +2852,13 @@ class FrontierExplorer:
         return False
 
     # ────────────── 逐门房间扫描 ──────────────
-    def _scan_rooms_sequentially(self):
+    def _scan_rooms_sequentially(self, reverse_order=False):
         """
         逐门扫描每个房间：导航到门口 → 进入 → 扫描 → 探索 → 返回门口。
 
-        顺序：y 降序（从走廊尽头向入口），先左后右。
+        参数:
+            reverse_order: False = y 降序（远端→近电梯，首层用）
+                          True  = y 升序（近电梯→远端，新楼层用）
 
         流程：
           1. 导航到走廊门前 (0.0, door_y)
@@ -2807,20 +2867,21 @@ class FrontierExplorer:
           4. 房间内前沿探索直到无前沿
           5. 返回当前房间门口 (0.0, door_y)
           6. 下一个房间
-
-        全部完成后：
-          导航至最后一扇门门口 (0.0, door_y)
-          导航至电梯位置 (0.0, elevator_y)
         """
         if not self.room_positions:
             rospy.loginfo("[房间扫描] 无房间可扫描")
             return
 
-        # ── 按 y 降序 + 先左后右排序 ──
+        # ── 排序：首层 y 降序（远→近电梯），新楼层 y 升序（近电梯→远）──
         # room_positions: [(center_x, center_y, side, y_bottom, y_top), ...]
-        rooms_sorted = sorted(
-            self.room_positions,
-            key=lambda r: (-r[1], 0 if r[2] == 'left' else 1))
+        if reverse_order:
+            rooms_sorted = sorted(
+                self.room_positions,
+                key=lambda r: (r[1], 0 if r[2] == 'left' else 1))
+        else:
+            rooms_sorted = sorted(
+                self.room_positions,
+                key=lambda r: (-r[1], 0 if r[2] == 'left' else 1))
 
         corridor_half_width = 1.1
         entry_depth = 1.0  # 进入房间的深度
@@ -2829,11 +2890,8 @@ class FrontierExplorer:
             "[房间扫描] ====== 开始逐门扫描 (共 %d 间) ======",
             len(rooms_sorted))
 
-        last_door_y = None
-
         for idx, (cx, cy, side, y_bottom, y_top) in enumerate(rooms_sorted):
             door_y = (y_bottom + y_top) / 2.0
-            last_door_y = door_y
 
             # 房间前沿探索边界
             if side == 'left':
@@ -2886,28 +2944,36 @@ class FrontierExplorer:
             rospy.loginfo("[房间扫描] ⑤ 返回门口 (0.00, %.2f)", door_y)
             self._navigate_to(0.0, door_y, timeout=30.0)
 
-        # ── 全部完成：导航至最后一扇门门口，再导航至电梯，然后乘梯上楼 ──
-        if self.elevator_center is not None and last_door_y is not None:
-            ex, ey = self.elevator_center
-            rospy.loginfo(
-                "[房间扫描] ====== 全部房间扫描完毕 ======")
-            rospy.loginfo(
-                "[房间扫描] 导航至最后一扇门门口 (0.00, %.2f)", last_door_y)
-            self._navigate_to(0.0, last_door_y, timeout=30.0)
-            rospy.loginfo(
-                "[房间扫描] 导航至电梯 (0.00, %.2f)", ey)
-            self._navigate_to(0.0, ey, timeout=60.0)
-
-            # ── 乘梯到下一层 ──
-            rospy.loginfo("[房间扫描] 开始乘梯流程...")
-            self._take_elevator(self.elevator_center, 0, 1)
-        else:
-            rospy.loginfo(
-                "[房间扫描] ====== 全部房间扫描完毕 "
-                "(电梯位置未知，停在当前位置) ======")
+        rospy.loginfo("[房间扫描] ====== 全部房间扫描完毕 ======")
 
         # 清除房间标记
         self._clear_room_markers()
+
+    # ────────────── 多楼层乘梯 ──────────────
+    def _go_to_elevator_and_ascend(self):
+        """
+        导航到电梯并乘梯上一层。
+
+        复用 floor 0 的 room_positions（x,y 布局相同，仅 z 不同）。
+        返回 True 成功，False 失败。
+        """
+        if self.elevator_center is None:
+            rospy.logwarn("[多楼层] 电梯位置未知，无法乘梯")
+            return False
+
+        next_floor = self.current_floor + 1
+        if next_floor > self.max_floor:
+            rospy.loginfo(
+                "[多楼层] 已在最高层 %d，无需乘梯", self.max_floor)
+            return False
+
+        ex, ey = self.elevator_center
+        rospy.loginfo(
+            "[多楼层] 导航至电梯 (0.00, %.2f) → 乘梯 %d→%d",
+            ey, self.current_floor, next_floor)
+        self._navigate_to(0.0, ey, timeout=60.0)
+        self._take_elevator(self.elevator_center, self.current_floor, next_floor)
+        return True
 
     # ────────────── 启动前初始化扫描 ──────────────
     def _initial_scan(self):
@@ -2972,7 +3038,15 @@ class FrontierExplorer:
             # ── 房间扫描（加载状态后也要执行）──
             if self.room_positions:
                 rospy.loginfo("[前沿探索] 🚪 开始逐门房间扫描...")
-                self._scan_rooms_sequentially()
+                self._scan_rooms_sequentially(reverse_order=False)
+
+                # ── 多楼层循环：逐层向上 ──
+                while self.current_floor < self.max_floor:
+                    if not self._go_to_elevator_and_ascend():
+                        break
+                    # 新楼层：复用 floor 0 的 room_positions（x,y 相同）
+                    # y 升序扫描（近电梯→远端），节省时间
+                    self._scan_rooms_sequentially(reverse_order=True)
             return
 
         # ── 第一阶段：出生点旋转扫描 ──
@@ -3171,7 +3245,15 @@ class FrontierExplorer:
             # ── 逐门房间扫描 ──
             if self.room_positions:
                 rospy.loginfo("[前沿探索] 🚪 开始逐门房间扫描...")
-                self._scan_rooms_sequentially()
+                self._scan_rooms_sequentially(reverse_order=False)
+
+                # ── 多楼层循环：逐层向上 ──
+                while self.current_floor < self.max_floor:
+                    if not self._go_to_elevator_and_ascend():
+                        break
+                    # 新楼层：复用 floor 0 的 room_positions（x,y 相同）
+                    # y 升序扫描（近电梯→远端），节省时间
+                    self._scan_rooms_sequentially(reverse_order=True)
 
         # ── 保存状态（如果配置了路径）──
         self._save_state(

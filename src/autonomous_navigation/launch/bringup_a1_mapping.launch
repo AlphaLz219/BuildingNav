@@ -111,6 +111,7 @@
               command="load"/>
     <param name="save_state_path" value="$(find autonomous_navigation)/../../maps/corridor_state.json"/>
     <param name="load_state_path" value="$(arg load_state)"/>
+    <param name="scene_info_path" value="$(find autonomous_navigation)/../../generated_building/team_scene_info.json"/>
   </node>
 
   <!-- ============= 6. RViz ============= -->
