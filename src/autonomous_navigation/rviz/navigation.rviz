@@ -250,7 +250,7 @@ Visualization Manager:
         Shaft Length: 1
         Shaft Radius: 0.05000000074505806
         Value: Arrow
-      Topic: /Odometry_gazebo
+      Topic: /odom
       Unreliable: false
       Value: true
     - Alpha: 1

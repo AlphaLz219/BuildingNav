@@ -9,6 +9,9 @@ catkin_package()
 catkin_install_python(PROGRAMS
   scripts/pointcloud_converter.py
   scripts/frontier_exploration.py
+  scripts/frontier_exploration_a1.py
+  scripts/cmd_vel_odom.py
+  scripts/tf_to_odom.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 

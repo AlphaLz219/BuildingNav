@@ -5,8 +5,8 @@
 
   <!-- ======================== Move Base ======================== -->
   <node pkg="move_base" type="move_base" name="move_base" respawn="false" output="screen">
-    <!-- 里程计话题：Gazebo diff_drive 发布在 /Odometry_gazebo -->
-    <remap from="odom" to="Odometry_gazebo"/>
+    <!-- 里程计话题：tf_to_odom 节点从 TF 转换发布到 /odom -->
+    <remap from="odom" to="/odom"/>
 
     <!-- 加载 costmap 共享参数 -->
     <rosparam file="$(find autonomous_navigation)/config/navigation/costmap_common_params.yaml"

@@ -184,7 +184,11 @@ void Estimator::run(){
             _odomTF.transform.rotation.y = _lowState->imu.quaternion[2];
             _odomTF.transform.rotation.z = _lowState->imu.quaternion[3];
 
-            _odomBroadcaster.sendTransform(_odomTF);
+            // 停用 odom→base TF 发布：
+            // 本 Estimator 的位置状态在 Gazebo 仿真中不积分（接触由步态相位决定，
+            // 与 RL 实际步态不匹配，位置被拉回原点）。
+            // odom→base 改由 cmd_vel_odom.py 航位推算节点发布，避免双发布者冲突。
+            // _odomBroadcaster.sendTransform(_odomTF);
 
             /* odometry */
             _odomMsg.header.stamp = _currentTime;
@@ -211,7 +215,8 @@ void Estimator::run(){
             _odomMsg.twist.twist.angular.z = _wBody(2);
             _odomMsg.twist.covariance = _odom_twist_covariance;
 
-            _pub.publish(_odomMsg);
+            // 停用 /odom 发布（同上，/odom 改由 cmd_vel_odom.py 航位推算节点发布）
+            // _pub.publish(_odomMsg);
             _count = 1;
         }
         ++_count;

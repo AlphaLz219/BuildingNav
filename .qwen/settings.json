@@ -11,7 +11,8 @@
       "Bash(rosnode *)",
       "Bash(rosparam *)",
       "Read(//opt/ros/noetic/include/hector_mapping/**)",
-      "Read(//opt/ros/noetic/share/hector_mapping/**)"
+      "Read(//opt/ros/noetic/share/hector_mapping/**)",
+      "Read(//opt/ros/noetic/share/**)"
     ]
   },
   "$version": 4

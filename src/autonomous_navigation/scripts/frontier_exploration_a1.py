@@ -5,7 +5,7 @@
 =========================================
 
 功能流程：
-  1. 订阅 hector_mapping 发布的 /map（OccupancyGrid）
+  1. 订阅 slam_toolbox 发布的 /map（OccupancyGrid）
   2. 检测前沿 —— 已知自由空间与未知空间的交界
   3. 对前沿点做连通域聚类，过滤噪声小簇
   4. 用比值法评分（Score = Gain / (Cost + epsilon)）选出最优前沿簇
@@ -31,11 +31,11 @@ from nav_msgs.srv import GetPlan, GetPlanRequest
 from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal
 from actionlib_msgs.msg import GoalStatus
 from visualization_msgs.msg import Marker, MarkerArray
-from geometry_msgs.msg import Point, PoseStamped, Twist
+from geometry_msgs.msg import Point, PoseStamped, Twist, Pose2D
 from std_msgs.msg import ColorRGBA
 from building_generator_interfaces.srv import CallElevator, SetDoorState
 from std_srvs.srv import Empty
-from hector_mapping.srv import ResetMapping, ResetMappingRequest
+from slam_toolbox_msgs.srv import SerializePoseGraph, DeserializePoseGraph
 
 
 # ═══════════════════════════════════════════════════════════
@@ -136,6 +136,15 @@ class FrontierExplorer:
         # ── 场景信息（比赛允许读取）──
         self.scene_info_path = rospy.get_param('~scene_info_path', '')
 
+        # ── 多楼层会话管理（slam_toolbox）──
+        self.floor_session_dir = rospy.get_param('~floor_session_dir', '')
+        self.slam_launch_pkg = rospy.get_param(
+            '~slam_launch_pkg', 'autonomous_navigation')
+        self.slam_launch_file = rospy.get_param(
+            '~slam_launch_file', 'slam_toolbox.launch')
+        self.slam_restart_timeout = rospy.get_param(
+            '~slam_restart_timeout', 30.0)
+
     def _load_scene_info(self):
         """
         读取比赛允许的场景信息文件，获取电梯服务楼层。
@@ -203,6 +212,7 @@ class FrontierExplorer:
         self.stair_center = None       # (sx, sy) 楼梯中心
         self.elevator_center = None    # (ex, ey) 电梯中心（当前楼层地图帧）
         self.floor_elevator_center = {}  # {floor: (ex, ey)} 各楼层地图帧中的电梯中心
+        self._slam_proc = None                  # 后台 slam_toolbox roslaunch 进程
         self.max_floor = 0              # 最高楼层（从 team_scene_info.json 读取）
         # ── 帧机制 ──
         # 每层楼的地图帧不同，电梯中心是该帧中的固定锚点。
@@ -217,6 +227,26 @@ class FrontierExplorer:
         """初始化 ROS 接口：TF、ActionClient、发布器、订阅器"""
         # TF 监听器 —— 查询机器人位姿
         self.tf_listener = tf.TransformListener()
+
+        # ── slam_toolbox 多楼层会话管理服务（serialize/deserialize）──
+        self._serialize_srv = None
+        self._deserialize_srv = None
+        try:
+            rospy.loginfo("[会话] 等待 /slam_toolbox/serialize_map 服务...")
+            rospy.wait_for_service('/slam_toolbox/serialize_map', timeout=5.0)
+            self._serialize_srv = rospy.ServiceProxy(
+                '/slam_toolbox/serialize_map', SerializePoseGraph)
+            rospy.loginfo("[会话] /slam_toolbox/serialize_map 已连接")
+        except rospy.ROSException:
+            rospy.logwarn("[会话] serialize_map 服务不可用（跳过）")
+        try:
+            rospy.loginfo("[会话] 等待 /slam_toolbox/deserialize_map 服务...")
+            rospy.wait_for_service('/slam_toolbox/deserialize_map', timeout=5.0)
+            self._deserialize_srv = rospy.ServiceProxy(
+                '/slam_toolbox/deserialize_map', DeserializePoseGraph)
+            rospy.loginfo("[会话] /slam_toolbox/deserialize_map 已连接")
+        except rospy.ROSException:
+            rospy.logwarn("[会话] deserialize_map 服务不可用（跳过）")
 
         # move_base ActionClient —— 发送导航目标并获取结果
         self.ac = actionlib.SimpleActionClient('move_base', MoveBaseAction)
@@ -244,17 +274,6 @@ class FrontierExplorer:
             '/set_door_state', SetDoorState)
         rospy.loginfo("[前沿探索] /set_door_state 已连接")
 
-        # hector_mapping 重置服务（多楼层切换时清空地图）
-        self._mapper_reset_srv = None
-        try:
-            rospy.loginfo("[会话] 等待 /restart_mapping_with_new_pose 服务...")
-            rospy.wait_for_service('/restart_mapping_with_new_pose', timeout=5.0)
-            self._mapper_reset_srv = rospy.ServiceProxy(
-                '/restart_mapping_with_new_pose', ResetMapping)
-            rospy.loginfo("[会话] /restart_mapping_with_new_pose 已连接")
-        except rospy.ROSException:
-            rospy.logwarn("[会话] hector_mapping reset 服务不可用（多楼层切换将不可用）")
-
         # 发布器 —— 前沿标记可视化（MarkerArray）
         self.marker_pub = rospy.Publisher(
             '/frontier_markers', MarkerArray, queue_size=1, latch=True)
@@ -271,13 +290,13 @@ class FrontierExplorer:
         self.room_marker_pub = rospy.Publisher(
             '/room_scan_markers', MarkerArray, queue_size=1, latch=True)
 
-        # 订阅器 —— hector_mapping 的栅格地图
+        # 订阅器 —— slam_toolbox 的栅格地图
         rospy.Subscriber('/map', OccupancyGrid, self._map_callback)
 
     # ────────────── 地图回调 ──────────────
     def _map_callback(self, msg):
         """
-        接收 hector_mapping 发布的栅格地图
+        接收 slam_toolbox 发布的栅格地图
 
         OccupancyGrid.data 值含义：
             0   = 自由空间（已探索，可通行）
@@ -879,7 +898,7 @@ class FrontierExplorer:
         到达目标后原地旋转 360° 扫描周围环境。
 
         move_base 导航成功时已自动停稳，直接发布旋转指令即可。
-        hector_mapping 在旋转过程中会持续更新地图。
+        slam_toolbox 在旋转过程中会持续更新地图。
 
         参数:
             angular_vel: 旋转角速度 (rad/s)，默认 0.5，约 12.6s 完成一圈
@@ -1975,39 +1994,123 @@ class FrontierExplorer:
             direction_x, direction_y, dist)
         return dist
 
-    # ────────────── 多楼层 hector_mapping 会话管理 ──────────────
-    def _reset_mapper(self):
-        """
-        调用 /restart_mapping_with_new_pose 清空地图，用于多楼层切换。
+    # ────────────── 多楼层 slam_toolbox 会话管理 ──────────────
+    def _floor_session_path(self, floor):
+        """楼层 SLAM 会话文件路径"""
+        if not self.floor_session_dir:
+            return ''
+        return os.path.join(self.floor_session_dir, 'floor_%d.session' % floor)
 
-        清空后 hector_mapping 从零开始重建新楼层地图。
-        由于使用 Gazebo 真值定位，机器人在新地图中的位置由 TF 自动确定。
-        返回: True 成功, False 失败
+    def _has_floor_session(self, floor):
+        """该楼层是否已有保存的 SLAM 会话"""
+        path = self._floor_session_path(floor)
+        if not path:
+            return False
+        return os.path.exists(path + '.posegraph') or os.path.exists(path)
+
+    def _serialize_floor(self, floor):
         """
-        if self._mapper_reset_srv is None:
-            rospy.logwarn("[会话] hector_mapping reset 服务不可用，跳过")
+        保存当前楼层 SLAM 会话到文件（乘梯前调用）。
+        """
+        if self._serialize_srv is None:
+            rospy.logwarn("[会话] serialize_map 服务不可用，跳过保存")
+            return False
+        path = self._floor_session_path(floor)
+        if not path:
+            rospy.logwarn("[会话] 未配置 floor_session_dir，跳过保存")
             return False
         try:
-            from geometry_msgs.msg import Pose
-            req = ResetMappingRequest()
-            req.initial_pose = Pose()
-            req.initial_pose.orientation.w = 1.0
-            self._mapper_reset_srv(req)
-            rospy.loginfo("[会话] ✓ hector_mapping 已清空")
-            # 等待新地图发布
-            self.map_data = None
-            deadline = rospy.Time.now() + rospy.Duration(10.0)
-            rate = rospy.Rate(5)
-            while not rospy.is_shutdown() and rospy.Time.now() < deadline:
-                if self.map_data is not None:
-                    rospy.loginfo("[会话] ✓ 新地图已就绪")
-                    return True
-                rate.sleep()
-            rospy.logwarn("[会话] 等待新地图超时")
-            return True  # mapper 已清空，地图会随扫描逐步建立
+            os.makedirs(self.floor_session_dir, exist_ok=True)
+            self._serialize_srv(filename=path)
+            rospy.loginfo("[会话] ✓ 楼层 %d 会话已保存: %s", floor, path)
+            return True
         except rospy.ServiceException as e:
-            rospy.logwarn("[会话] mapper reset 失败: %s", e)
+            rospy.logwarn("[会话] serialize 失败: %s", e)
             return False
+
+    def _deserialize_floor(self, floor, init_x=0.0, init_y=0.0, init_yaw=0.0):
+        """
+        恢复目标楼层的 SLAM 会话（乘梯到达后、开门前调用）。
+        """
+        if self._deserialize_srv is None:
+            rospy.logwarn("[会话] deserialize_map 服务不可用，跳过恢复")
+            return False
+        path = self._floor_session_path(floor)
+        if not path or not (os.path.exists(path + '.posegraph') or os.path.exists(path)):
+            rospy.logwarn("[会话] 楼层 %d 无会话文件，无法恢复: %s", floor, path)
+            return False
+        try:
+            self._deserialize_srv(
+                filename=path,
+                match_type=2,  # START_AT_GIVEN_POSE
+                initial_pose=Pose2D(x=init_x, y=init_y, theta=init_yaw))
+            rospy.loginfo(
+                "[会话] ✓ 楼层 %d 会话已恢复 (初始位姿 %.1f,%.1f,%.1f°)",
+                floor, init_x, init_y, np.degrees(init_yaw))
+            return True
+        except rospy.ServiceException as e:
+            rospy.logwarn("[会话] deserialize 失败: %s", e)
+            return False
+
+    def _restart_slam(self, timeout=None):
+        """
+        通过重启 slam_toolbox 节点实现会话重置（Noetic 版无 reset 服务）。
+        """
+        import subprocess
+        if timeout is None:
+            timeout = self.slam_restart_timeout
+
+        rospy.loginfo("[会话] 关闭旧 slam_toolbox 节点...")
+        try:
+            subprocess.call(['rosnode', 'kill', '/slam_toolbox'],
+                            timeout=10.0)
+        except Exception as e:
+            rospy.logwarn("[会话] rosnode kill 异常: %s", e)
+        rospy.sleep(3.0)
+
+        rospy.loginfo("[会话] 重新启动 slam_toolbox (%s %s)...",
+                      self.slam_launch_pkg, self.slam_launch_file)
+        try:
+            self._slam_proc = subprocess.Popen(
+                ['roslaunch', self.slam_launch_pkg, self.slam_launch_file],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL)
+        except Exception as e:
+            rospy.logerr("[会话] 启动 slam_toolbox 失败: %s", e)
+            return False
+
+        rospy.loginfo("[会话] 等待新节点首帧 /map (最多 %.0fs)...", timeout)
+        self.map_data = None
+        deadline = rospy.Time.now() + rospy.Duration(timeout)
+        rate = rospy.Rate(5)
+        while not rospy.is_shutdown() and rospy.Time.now() < deadline:
+            if self.map_data is not None:
+                rospy.loginfo(
+                    "[会话] ✓ SLAM 重启完成，/map 已恢复 "
+                    "(地图原点 %.2f, %.2f)",
+                    self.map_origin_x, self.map_origin_y)
+                self._refresh_slam_services()
+                return True
+            rate.sleep()
+        rospy.logwarn("[会话] 等待 /map 恢复超时 (%ds)", timeout)
+        return False
+
+    def _refresh_slam_services(self):
+        """SLAM 节点重启后刷新 serialize/deserialize 服务代理"""
+        try:
+            rospy.wait_for_service('/slam_toolbox/serialize_map', timeout=5.0)
+            self._serialize_srv = rospy.ServiceProxy(
+                '/slam_toolbox/serialize_map', SerializePoseGraph)
+        except rospy.ROSException:
+            self._serialize_srv = None
+            rospy.logwarn("[会话] 刷新 serialize_map 服务失败")
+        try:
+            rospy.wait_for_service('/slam_toolbox/deserialize_map', timeout=5.0)
+            self._deserialize_srv = rospy.ServiceProxy(
+                '/slam_toolbox/deserialize_map', DeserializePoseGraph)
+        except rospy.ROSException:
+            self._deserialize_srv = None
+            rospy.logwarn("[会话] 刷新 deserialize_map 服务失败")
 
     def _clear_costmaps(self):
         """清除 move_base 代价地图，丢弃旧楼层障碍数据"""
@@ -2115,40 +2218,42 @@ class FrontierExplorer:
     def _switch_floor_session(self, target_floor, init_x=0.0, init_y=0.0,
                               init_yaw=0.0):
         """
-        切换到目标楼层（电梯内、开门前调用）。
+        切换到目标楼层的 SLAM 会话（电梯内、开门前调用）。
 
-        hector_mapping known-pose 方案下，楼层切换很简单：
-          1. 记录当前楼层电梯中心
-          2. 清空 mapper（开始新楼层建图）
-          3. 实测新地图中机器人位置作为该楼层电梯中心
-          4. 平移共享坐标
-          5. 清除代价地图
+        - 有会话文件 → deserialize 完整恢复该楼层
+        - 无会话文件 → 重启 slam_toolbox 节点全新建图，实测新地图中
+          机器人位置作为该楼层电梯中心
         """
         # 记录当前楼层地图帧中的电梯中心
         if self.elevator_center:
             self.floor_elevator_center[self.current_floor] = \
                 tuple(self.elevator_center)
 
-        # 清空 mapper，开始新楼层建图
-        ok = self._reset_mapper()
-        if ok:
-            rospy.loginfo("[会话] 楼层 %d mapper 已重置，开始新建图", target_floor)
-            # 实测机器人在新地图中的位置（= 电梯中心在该楼层帧的坐标）
-            rx, ry, _ = self._get_robot_pose()
-            for _ in range(5):
-                if rx is not None:
-                    break
-                rospy.sleep(0.5)
-                rx, ry, _ = self._get_robot_pose()
-            if rx is not None:
-                self.floor_elevator_center[target_floor] = (rx, ry)
+        if self._has_floor_session(target_floor):
+            ok = self._deserialize_floor(target_floor, init_x, init_y, init_yaw)
+        else:
+            # 首次访问：重启 SLAM 节点，全新建图
+            ok = self._restart_slam()
+            if ok:
                 rospy.loginfo(
-                    "[会话] 楼层 %d 电梯中心(实测) = (%.2f, %.2f)",
-                    target_floor, rx, ry)
-            else:
-                rospy.logwarn(
-                    "[会话] 无法获取机器人位姿，该楼层电梯中心记为 (0,0)")
-                self.floor_elevator_center[target_floor] = (0.0, 0.0)
+                    "[会话] 楼层 %d 首次访问，开始全新建图", target_floor)
+                # 实测机器人在新地图中的位置
+                rx, ry, _ = self._get_robot_pose()
+                for _ in range(5):
+                    if rx is not None:
+                        break
+                    rospy.sleep(0.5)
+                    rx, ry, _ = self._get_robot_pose()
+                if rx is not None:
+                    self.floor_elevator_center[target_floor] = (rx, ry)
+                    rospy.loginfo(
+                        "[会话] 楼层 %d 电梯中心(实测) = (%.2f, %.2f)",
+                        target_floor, rx, ry)
+                else:
+                    rospy.logwarn(
+                        "[会话] 无法获取新地图中机器人位姿，"
+                        "该楼层电梯中心记为 (0,0)")
+                    self.floor_elevator_center[target_floor] = (0.0, 0.0)
 
         if ok:
             self._shift_shared_to_floor(target_floor)
@@ -2252,9 +2357,8 @@ class FrontierExplorer:
             rospy.logerr("[电梯] 呼叫电梯失败")
             return
 
-        # ── 9b. 切换目标楼层建图会话（开门前，电梯内）──
-        # 机器人在电梯中心，朝向 +x（进入电梯时的朝向）；
-        # 初始位姿用目标楼层地图帧中的电梯中心坐标
+        # ── 9b. 保存当前楼层 SLAM 会话，然后切换目标楼层 ──
+        self._serialize_floor(from_floor)
         t_ex, t_ey = self._floor_elevator_center(to_floor)
         rospy.loginfo(
             "[会话] 开门前切换到楼层 %d 会话 (初始位姿 %.1f,%.1f,0°)...",
@@ -3053,6 +3157,7 @@ class FrontierExplorer:
         if self.init_rotate_enabled:
             rospy.loginfo("[前沿探索] 🔄 第一阶段：出生点旋转扫描...")
             self._rotate_360()
+            # self._navigate_to(0, 20, timeout=30.0)
 
         # ── 建筑边界测量（第一阶段扫描后，y=0~2m 范围测量 x 方向自由空间）──
         # 用于调试验证建筑尺寸与生成参数是否一致
