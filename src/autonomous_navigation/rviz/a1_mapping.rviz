@@ -28,7 +28,7 @@ Visualization Manager:
       Color Scheme: map
       Draw Behind: false
       Enabled: true
-      Name: Map (Known-Pose)
+      Name: "Map "
       Topic: /map
       Unreliable: false
       Use Timestamp: false
@@ -418,7 +418,9 @@ Visualization Manager:
       Marker Topic: /current_goal_marker
       Name: Marker
       Namespaces:
-        {}
+        corridor_entrance: true
+        elevator: true
+        stairs: true
       Queue Size: 100
       Value: true
     - Class: rviz/MarkerArray
@@ -426,7 +428,7 @@ Visualization Manager:
       Marker Topic: /forbidden_zone_markers
       Name: MarkerArray
       Namespaces:
-        {}
+        forbidden_zones: true
       Queue Size: 100
       Value: true
     - Class: rviz/MarkerArray
@@ -434,7 +436,7 @@ Visualization Manager:
       Marker Topic: /frontier_markers
       Name: MarkerArray
       Namespaces:
-        {}
+        doors: true
       Queue Size: 100
       Value: true
     - Class: rviz/MarkerArray
@@ -442,7 +444,17 @@ Visualization Manager:
       Marker Topic: /room_scan_markers
       Name: MarkerArray
       Namespaces:
-        {}
+        room_scan: true
+        room_scan_label: true
+      Queue Size: 100
+      Value: true
+    - Class: rviz/MarkerArray
+      Enabled: true
+      Marker Topic: /door_debug_markers
+      Name: MarkerArray
+      Namespaces:
+        door_candidates: true
+        wall_profile: true
       Queue Size: 100
       Value: true
   Enabled: true
@@ -468,7 +480,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 19.56411361694336
+      Distance: 21.28529167175293
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -476,9 +488,9 @@ Visualization Manager:
         Value: false
       Field of View: 0.7850000262260437
       Focal Point:
-        X: 0.2346165031194687
-        Y: 9.765400886535645
-        Z: 0.05488353222608566
+        X: -0.810921847820282
+        Y: 6.323974132537842
+        Z: 0.055929090827703476
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
@@ -486,7 +498,7 @@ Visualization Manager:
       Near Clip Distance: 0.009999999776482582
       Pitch: 1.5697963237762451
       Target Frame: base
-      Yaw: 6.283164024353027
+      Yaw: 6.283164978027344
     Saved: ~
 Window Geometry:
   Displays:

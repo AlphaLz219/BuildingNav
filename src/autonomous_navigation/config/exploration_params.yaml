@@ -84,3 +84,34 @@ blacklist_radius: 1.5
 
 # 距机器人太近的前沿不选（米），已在附近无需导航
 min_goal_distance: 0.8
+
+# ---- 走廊房门检测（自适应阈值 + 短间隙合并）----
+# 每行在 x=0 两侧 ±door_lateral_window 内取最大墙距，抗单列噪声
+# （门框被误标为墙时，旁边列仍能看到开口）
+door_lateral_window: 0.5
+
+# 门扫描沿 y 轴的采样步长（米），0.1 = 更细的边界分辨率，减少单点伪影
+door_scan_step: 0.1
+
+# 门进入阈值 = max(baseline × ratio, baseline + margin)
+# baseline 为该侧墙距 30 分位数（典型墙体读数），门是少数深读数不会污染
+# 例：走廊基线 1.1m → enter ≈ max(1.76, 1.8) = 1.8m
+door_thresh_ratio: 1.6
+door_thresh_margin: 0.7
+
+# 门退出阈值 = baseline + exit_margin（滞回下限，低于进入阈值）
+# 门内某行读数轻微抖动时不会退出，防止一扇门被拆成两段
+door_exit_margin: 0.4
+
+# 相邻门段间空隙 ≤ 此值则合并（米），解决门被噪声拆段 / 紧邻门小墙柱误判
+# 实测一扇门常因中间墙距短暂回落被拆成两段（空隙约 0.5~0.6m），
+# 0.8m 可合并；本建筑门间距 ~14m，不会误并相邻门
+door_merge_gap: 0.8
+
+# 门最小宽度（米），低于此值的段视为噪声
+min_door_width: 0.6
+
+# 门检测调试：True 时打印逐行剖面 + 发布剖面/候选标记到 RViz
+# 并可将剖面落盘到 door_debug_dir
+door_debug: true
+door_debug_dir: ""

@@ -24,6 +24,7 @@ import actionlib
 import tf
 import json
 import os
+import time
 import threading
 
 from nav_msgs.msg import OccupancyGrid
@@ -120,6 +121,26 @@ class FrontierExplorer:
         # 走廊深入距离（米），入口检测完成后向走廊内推进的距离
         # 用于在房门扫描前让 LiDAR 覆盖更多走廊区域
         self.corridor_entry_depth = rospy.get_param('~corridor_entry_depth', 5.0)
+
+        # ── 走廊房门检测（自适应阈值 + 短间隙合并）──
+        # 每行在 x=0 两侧 ±door_lateral_window 内取最大墙距，抗单列噪声
+        self.door_lateral_window = rospy.get_param('~door_lateral_window', 0.5)
+        # 门扫描沿 y 轴的采样步长（米），0.1 = 更细的边界分辨率
+        self.door_scan_step = rospy.get_param('~door_scan_step', 0.1)
+        # 门进入阈值 = max(baseline × ratio, baseline + margin)
+        self.door_thresh_ratio = rospy.get_param('~door_thresh_ratio', 1.6)
+        self.door_thresh_margin = rospy.get_param('~door_thresh_margin', 0.7)
+        # 门退出阈值 = baseline + exit_margin（滞回，防门内抖动把门拆段）
+        self.door_exit_margin = rospy.get_param('~door_exit_margin', 0.4)
+        # 相邻门段间空隙 ≤ 此值则合并（米）。
+        # 实测一扇门常因中间墙距短暂回落被拆成两段（空隙约 0.5~0.6m），
+        # 默认 0.8m 可合并；本建筑门间距 ~14m，不会误并相邻门。
+        self.door_merge_gap = rospy.get_param('~door_merge_gap', 0.8)
+        # 门最小宽度（米），低于此值的段视为噪声
+        self.min_door_width = rospy.get_param('~min_door_width', 0.6)
+        # 门检测调试：打印逐行剖面 + 发布候选/剖面标记 + 剖面落盘
+        self.door_debug = rospy.get_param('~door_debug', True)
+        self.door_debug_dir = rospy.get_param('~door_debug_dir', '')
 
         # ── 状态持久化：保存/加载初始扫描结果 ──
         self.save_state_path = rospy.get_param('~save_state_path', '')
@@ -218,7 +239,7 @@ class FrontierExplorer:
         # 每层楼的地图帧不同，电梯中心是该帧中的固定锚点。
         # 切换楼层时调用 /restart_mapping_with_new_pose 清空地图，
         # 再按"两帧电梯中心之差"平移共享坐标。
-        self.room_positions = []       # [(center_x, center_y, side, y_bottom, y_top), ...]
+        self.room_positions = []       # [(center_x, center_y, side, y_bottom, y_top, door_y), ...]
         # 持久化字段（从文件加载时填充）
         self.saved_entrance_y = None
         self.saved_corridor_end_y = None
@@ -289,6 +310,9 @@ class FrontierExplorer:
         # 发布器 —— 当前扫描房间可视化（半透明彩色框）
         self.room_marker_pub = rospy.Publisher(
             '/room_scan_markers', MarkerArray, queue_size=1, latch=True)
+        # 发布器 —— 门检测调试可视化（墙距剖面小球 + 原始门候选段）
+        self.door_debug_pub = rospy.Publisher(
+            '/door_debug_markers', MarkerArray, queue_size=1, latch=True)
 
         # 订阅器 —— slam_toolbox 的栅格地图
         rospy.Subscriber('/map', OccupancyGrid, self._map_callback)
@@ -1229,15 +1253,17 @@ class FrontierExplorer:
     # ────────────── 走廊房门扫描 ──────────────
     def _scan_corridor_doors(self, entrance_y, corridor_end_y=None):
         """
-        从走廊入口到尽头，沿 x=0 中线逐行扫描左右墙距，检测房门。
+        从走廊入口到尽头，沿走廊中线扫描左右墙距，检测房门。
 
-        核心改动：自由空间包含未知(-1)，仅真实墙壁(100)才视为边界。
-        这样即使门内房间未被完整扫图，墙距也会骤增 → 正确识别为门。
-
-        检测逻辑：
-          - 走廊墙距基线 ~1-1.5m
-          - 墙距跳到 >2.5m → 房门开始
-          - 墙距回落到 <2.5m → 房门结束
+        四遍处理（自适应阈值 + 滞回 + 短间隙合并）：
+          1. 剖面采集：每行在横向窗口 ±door_lateral_window 内取最大墙距，
+             抗单列噪声（门框被误标为墙时，旁边列仍能看到开口）
+          2. 自适应阈值：每侧基线 baseline = 墙距 30 分位数
+               进入阈值 enter = max(baseline×ratio, baseline+margin)
+               退出阈值 exit = baseline + exit_margin（滞回，防门内抖动拆段）
+          3. 状态机分类：dist > enter 进入门，dist < exit 退出门
+          4. 短间隙合并：相邻门段间空隙 ≤ merge_gap 合并；
+             合并后段宽 ≥ min_door_width 才记为门
 
         参数:
             entrance_y:      走廊入口 y 坐标
@@ -1252,115 +1278,170 @@ class FrontierExplorer:
         max_scan_dist = 12.0  # 单侧最大扫描距离
 
         max_y = corridor_end_y if corridor_end_y else entrance_y + 30.0
-        scan_y = entrance_y + 0.5
-        step = 0.2
-        door_thresh = 2.5
-        min_door_width = 0.6  # 门至少宽0.6m，过滤墙壁扫描噪声
+        scan_y_start = entrance_y + 0.5
+        step = self.door_scan_step
 
-        doors = []
-        prev_left = None
-        prev_right = None
-        in_left_door = False
-        in_right_door = False
-        left_door_start = None
-        right_door_start = None
+        # ── 横向窗口列偏移（世界坐标 → 栅格列）──
+        win_half = self.door_lateral_window
+        win_xs = np.arange(-win_half, win_half + 1e-6, res)
+        win_cols = [int((x - self.map_origin_x) / res) for x in win_xs]
+        max_dc = int(max_scan_dist / res)
 
-        rospy.loginfo("[房门扫描] ====== y=%.2f → y=%.2f ======", scan_y, max_y)
+        def _wall_dist(row, sign):
+            """
+            在横向窗口内，从每个窗口列沿 sign 方向扫描，返回最大墙距（米）。
 
+            自由(0)和未知(-1)都视为可穿越，仅真实墙壁(100)才停止；
+            起始列若为未知则视为 LiDAR 未覆盖，该列跳过。
+            """
+            best = 0.0
+            for cc in win_cols:
+                if cc < 0 or cc >= w:
+                    continue
+                if self.map_data[row, cc] == -1:
+                    continue
+                dist = 0.0
+                for dc in range(1, max_dc + 1):
+                    nc = cc + sign * dc
+                    if nc < 0 or nc >= w:
+                        break
+                    if self.map_data[row, nc] == 100:
+                        dist = dc * res
+                        break
+                else:
+                    dist = max_dc * res  # 全程未碰墙 → 大开口
+                best = max(best, dist)
+            return best
+
+        # ── Pass 1: 剖面采集 ──
+        y_samples = []
+        left_profile = []
+        right_profile = []
+        scan_y = scan_y_start
         while scan_y <= max_y:
-            col = int((0.0 - self.map_origin_x) / res)
             row = int((scan_y - self.map_origin_y) / res)
             if row < 0 or row >= h:
                 break
-
-            # ── 测左墙距：仅真实墙壁(100)停止，自由(0)和未知(-1)都继续 ──
-            left = 0.0
-            for dc in range(1, int(max_scan_dist / res)):
-                lc = col - dc
-                if lc < 0 or lc >= w:
-                    break
-                val = self.map_data[row, lc]
-                if val == 100:          # 只碰真墙才停
-                    left = dc * res
-                    break
-                if dc == int(max_scan_dist / res) - 1:
-                    left = dc * res     # 到头也没碰墙 → 大开口
-
-            # ── 测右墙距 ──
-            right = 0.0
-            for dc in range(1, int(max_scan_dist / res)):
-                rc = col + dc
-                if rc < 0 or rc >= w:
-                    break
-                val = self.map_data[row, rc]
-                if val == 100:
-                    right = dc * res
-                    break
-                if dc == int(max_scan_dist / res) - 1:
-                    right = dc * res
-
-            rospy.logdebug("[房门扫描] y=%.2f  L=%.2fm  R=%.2fm",
-                          scan_y, left, right)
-
-            # ── 左门检测 ──
-            if left > door_thresh and not in_left_door:
-                in_left_door = True
-                left_door_start = scan_y
-                rospy.logdebug("[房门扫描]   左侧门开始 @ y=%.2f", scan_y)
-            elif left <= door_thresh and in_left_door:
-                in_left_door = False
-                span = scan_y - left_door_start
-                door_y = (left_door_start + scan_y) / 2.0
-                if span >= min_door_width:
-                    doors.append((door_y, 'left'))
-                    rospy.loginfo("[房门扫描] ★ 左侧门: y=%.2f (宽 %.2fm)",
-                                  door_y, span)
-                else:
-                    rospy.logdebug("[房门扫描]   左侧门跳过(宽%.2fm < %.2fm 噪声)",
-                                  span, min_door_width)
-
-            # ── 右门检测 ──
-            if right > door_thresh and not in_right_door:
-                in_right_door = True
-                right_door_start = scan_y
-                rospy.logdebug("[房门扫描]   右侧门开始 @ y=%.2f", scan_y)
-            elif right <= door_thresh and in_right_door:
-                in_right_door = False
-                span = scan_y - right_door_start
-                door_y = (right_door_start + scan_y) / 2.0
-                if span >= min_door_width:
-                    doors.append((door_y, 'right'))
-                    rospy.loginfo("[房门扫描] ★ 右侧门: y=%.2f (宽 %.2fm)",
-                                  door_y, span)
-                else:
-                    rospy.logdebug("[房门扫描]   右侧门跳过(宽%.2fm < %.2fm 噪声)",
-                                  span, min_door_width)
-
-            prev_left = left
-            prev_right = right
+            y_samples.append(scan_y)
+            left_profile.append(_wall_dist(row, -1))
+            right_profile.append(_wall_dist(row, +1))
             scan_y += step
 
-        # 扫描结束还在门内 → 宽度足够才记录
-        if in_left_door and left_door_start is not None:
-            span = scan_y - left_door_start
-            door_y = (left_door_start + scan_y) / 2.0
-            if span >= min_door_width:
-                doors.append((door_y, 'left'))
-                rospy.loginfo("[房门扫描] ★ 左侧门(未闭合): y=%.2f (宽 %.2fm)",
-                              door_y, span)
-            else:
-                rospy.logdebug("[房门扫描]   左侧门(未闭合)跳过(宽%.2fm 噪声)", span)
-        if in_right_door and right_door_start is not None:
-            span = scan_y - right_door_start
-            door_y = (right_door_start + scan_y) / 2.0
-            if span >= min_door_width:
-                doors.append((door_y, 'right'))
-                rospy.loginfo("[房门扫描] ★ 右侧门(未闭合): y=%.2f (宽 %.2fm)",
-                              door_y, span)
-            else:
-                rospy.logdebug("[房门扫描]   右侧门(未闭合)跳过(宽%.2fm 噪声)", span)
+        if not y_samples:
+            rospy.logwarn("[房门扫描] 无有效采样点，返回空")
+            return []
 
-        rospy.loginfo("[房门扫描] ====== 共检测到 %d 扇门 ======", len(doors))
+        # ── Pass 2: 自适应阈值（每侧独立）──
+        def _adaptive_thresh(profile):
+            arr = np.array(profile)
+            # 过滤无效行（全未知/越界 → 墙距 0），避免拉低基线
+            valid = arr[arr > 0.1]
+            if len(valid) == 0:
+                return 0.0, 1.5, 0.5
+            baseline = float(np.percentile(valid, 30))  # 典型墙体读数
+            enter = max(baseline * self.door_thresh_ratio,
+                        baseline + self.door_thresh_margin)
+            exit_ = baseline + self.door_exit_margin   # 滞回下限
+            return baseline, enter, exit_
+
+        left_th = _adaptive_thresh(left_profile)
+        right_th = _adaptive_thresh(right_profile)
+        rospy.loginfo(
+            "[房门扫描] ====== y=%.2f → y=%.2f ======", scan_y_start, max_y)
+        rospy.loginfo(
+            "[房门扫描] 自适应阈值: 左 baseline=%.2f enter=%.2f exit=%.2f | "
+            "右 baseline=%.2f enter=%.2f exit=%.2f",
+            left_th[0], left_th[1], left_th[2],
+            right_th[0], right_th[1], right_th[2])
+
+        # ── Pass 3+4: 滞回状态机分类 + 短间隙合并 ──
+        def _extract_doors(profile, thresholds, side):
+            baseline, enter_th, exit_th = thresholds
+
+            # 滞回状态机生成门/非门布尔序列
+            in_door = False
+            door_bool = []
+            for d in profile:
+                if not in_door and d > enter_th:
+                    in_door = True
+                elif in_door and d < exit_th:
+                    in_door = False
+                door_bool.append(in_door)
+
+            # run-length 提取原始门段
+            raw_segments = []
+            i = 0
+            n = len(door_bool)
+            while i < n:
+                if door_bool[i]:
+                    j = i
+                    while j < n and door_bool[j]:
+                        j += 1
+                    raw_segments.append((i, j - 1))
+                    i = j
+                else:
+                    i += 1
+
+            if self.door_debug:
+                for (s, e) in raw_segments:
+                    rospy.loginfo(
+                        "[房门扫描][%s] 原始段 y=[%.2f, %.2f] 宽=%.2fm",
+                        side, y_samples[s], y_samples[e],
+                        y_samples[e] - y_samples[s])
+
+            # 短间隙合并：相邻段空隙 ≤ merge_gap 则合并
+            merged = []
+            for (s, e) in raw_segments:
+                if merged:
+                    ps, pe = merged[-1]
+                    gap = y_samples[s] - y_samples[pe]
+                    if gap <= self.door_merge_gap:
+                        if self.door_debug:
+                            rospy.loginfo(
+                                "[房门扫描][%s] 合并短间隙 %.2fm ≤ %.2fm "
+                                "→ [%.2f, %.2f]",
+                                side, gap, self.door_merge_gap,
+                                y_samples[ps], y_samples[e])
+                        merged[-1] = (ps, e)
+                        continue
+                merged.append((s, e))
+
+            doors = []
+            for (s, e) in merged:
+                span = y_samples[e] - y_samples[s]
+                if span >= self.min_door_width:
+                    door_y = (y_samples[s] + y_samples[e]) / 2.0
+                    doors.append((door_y, side))
+                    rospy.loginfo(
+                        "[房门扫描] ★ %s侧门: y=%.2f (宽 %.2fm)",
+                        side, door_y, span)
+                else:
+                    rospy.loginfo(
+                        "[房门扫描][%s] 段宽 %.2fm < %.2fm，过滤为噪声",
+                        side, span, self.min_door_width)
+            return doors, raw_segments
+
+        left_doors, left_raw = _extract_doors(
+            left_profile, left_th, 'left')
+        right_doors, right_raw = _extract_doors(
+            right_profile, right_th, 'right')
+
+        doors = left_doors + right_doors
+
+        # ── 调试输出：剖面标记 + 候选段标记 + 剖面落盘 ──
+        if self.door_debug:
+            self._publish_wall_profile_markers(
+                y_samples, left_profile, right_profile)
+            self._publish_door_candidate_markers(
+                y_samples, {'left': left_raw, 'right': right_raw})
+            self._save_door_profile_debug(
+                entrance_y, corridor_end_y,
+                y_samples, left_profile, right_profile,
+                left_th, right_th, doors)
+
+        rospy.loginfo(
+            "[房门扫描] ====== 共检测到 %d 扇门 (左 %d, 右 %d) ======",
+            len(doors), len(left_doors), len(right_doors))
         return doors
 
     def _publish_door_markers(self, doors):
@@ -1396,6 +1477,135 @@ class FrontierExplorer:
 
         self.marker_pub.publish(marker_array)
         rospy.logdebug("[房门扫描] 📍 已发布 %d 个房门标记", len(doors))
+
+    # ────────────── 门检测调试可视化 ──────────────
+    def _publish_wall_profile_markers(self, y_samples, left_profile, right_profile):
+        """
+        发布两侧墙距剖面小球标记（调试用，door_debug=True 时调用）。
+
+        球位于实测墙点 (±dist, y)：左=蓝，右=绿。
+        门处球会明显深入房间 → 在 RViz 中一眼看出门在哪、基线是多少。
+        """
+        marker_array = MarkerArray()
+        clear = Marker()
+        clear.header.frame_id = 'map'
+        clear.header.stamp = rospy.Time.now()
+        clear.ns = 'wall_profile'
+        clear.id = 0
+        clear.action = Marker.DELETEALL
+        marker_array.markers.append(clear)
+
+        idx = 1
+        for y, d in zip(y_samples, left_profile):
+            m = Marker()
+            m.header.frame_id = 'map'
+            m.header.stamp = rospy.Time.now()
+            m.ns = 'wall_profile'
+            m.id = idx
+            idx += 1
+            m.type = Marker.SPHERE
+            m.action = Marker.ADD
+            m.pose.position = Point(x=-d, y=y, z=0.1)
+            m.pose.orientation.w = 1.0
+            m.scale.x = 0.12
+            m.scale.y = 0.12
+            m.scale.z = 0.12
+            m.color = ColorRGBA(r=0.2, g=0.4, b=1.0, a=0.9)
+            m.lifetime = rospy.Duration(0)
+            marker_array.markers.append(m)
+        for y, d in zip(y_samples, right_profile):
+            m = Marker()
+            m.header.frame_id = 'map'
+            m.header.stamp = rospy.Time.now()
+            m.ns = 'wall_profile'
+            m.id = idx
+            idx += 1
+            m.type = Marker.SPHERE
+            m.action = Marker.ADD
+            m.pose.position = Point(x=d, y=y, z=0.1)
+            m.pose.orientation.w = 1.0
+            m.scale.x = 0.12
+            m.scale.y = 0.12
+            m.scale.z = 0.12
+            m.color = ColorRGBA(r=0.2, g=0.9, b=0.3, a=0.9)
+            m.lifetime = rospy.Duration(0)
+            marker_array.markers.append(m)
+
+        self.door_debug_pub.publish(marker_array)
+        rospy.loginfo("[房门扫描] 📍 已发布墙距剖面标记 (%d 个)", idx - 1)
+
+    def _publish_door_candidate_markers(self, y_samples, raw_segments_by_side):
+        """
+        发布合并前的原始门候选段（橙色半透明方块），用于调试对比。
+
+        橙色候选 vs 最终蓝/绿门 → 直观看到哪些段被合并、哪些被过滤。
+        """
+        marker_array = MarkerArray()
+        clear = Marker()
+        clear.header.frame_id = 'map'
+        clear.header.stamp = rospy.Time.now()
+        clear.ns = 'door_candidates'
+        clear.id = 0
+        clear.action = Marker.DELETEALL
+        marker_array.markers.append(clear)
+
+        idx = 1
+        for side, segments in raw_segments_by_side.items():
+            x_pos = -1.4 if side == 'left' else 1.4
+            for (s, e) in segments:
+                y0 = y_samples[s]
+                y1 = y_samples[e]
+                m = Marker()
+                m.header.frame_id = 'map'
+                m.header.stamp = rospy.Time.now()
+                m.ns = 'door_candidates'
+                m.id = idx
+                idx += 1
+                m.type = Marker.CUBE
+                m.action = Marker.ADD
+                m.pose.position = Point(x=x_pos, y=(y0 + y1) / 2.0, z=0.3)
+                m.pose.orientation.w = 1.0
+                m.scale.x = 0.15
+                m.scale.y = max(0.2, y1 - y0)
+                m.scale.z = 0.6
+                m.color = ColorRGBA(r=1.0, g=0.6, b=0.0, a=0.5)
+                m.lifetime = rospy.Duration(0)
+                marker_array.markers.append(m)
+
+        self.door_debug_pub.publish(marker_array)
+        rospy.loginfo("[房门扫描] 📍 已发布原始门候选标记 (%d 个)", idx - 1)
+
+    def _save_door_profile_debug(self, entrance_y, corridor_end_y,
+                                 y_samples, left_profile, right_profile,
+                                 left_th, right_th, doors):
+        """
+        将两侧墙距剖面、阈值与检测结果落盘为 JSON，便于离线绘图调参。
+        """
+        if not self.door_debug_dir:
+            return
+        try:
+            os.makedirs(self.door_debug_dir, exist_ok=True)
+            fname = 'door_profile_%s.json' % time.strftime('%Y%m%d_%H%M%S')
+            path = os.path.join(self.door_debug_dir, fname)
+            data = {
+                'entrance_y': entrance_y,
+                'corridor_end_y': corridor_end_y,
+                'y_samples': y_samples,
+                'left_profile': left_profile,
+                'right_profile': right_profile,
+                'left_thresholds': {
+                    'baseline': left_th[0], 'enter': left_th[1],
+                    'exit': left_th[2]},
+                'right_thresholds': {
+                    'baseline': right_th[0], 'enter': right_th[1],
+                    'exit': right_th[2]},
+                'doors': [{'y': y, 'side': s} for (y, s) in doors],
+            }
+            with open(path, 'w') as f:
+                json.dump(data, f, indent=2)
+            rospy.loginfo("[房门扫描] ✓ 剖面已落盘: %s", path)
+        except (IOError, OSError) as e:
+            rospy.logwarn("[房门扫描] 剖面落盘失败: %s", e)
 
     # ────────────── 高度剖面构建（内部工具） ──────────────
     def _build_height_profile(self, y_start, dy_sign, max_dist_m):
@@ -1647,14 +1857,22 @@ class FrontierExplorer:
         self.goal_marker_pub.publish(m)
 
     # ────────────── 房间扫描可视化 ──────────────
-    def _publish_current_room_marker(self, room_idx, bounds, side, total_rooms):
+    def _publish_current_room_marker(self, room_idx, bounds, side, total_rooms,
+                                     rooms=None):
         """
         发布当前扫描房间的半透明彩色框标记到 RViz。
 
         每间房间用不同的颜色，左侧房间用蓝色系，右侧房间用绿色系。
         已扫描过的房间保留为低透明度，当前房间高透明度。
+
+        参数:
+            room_idx:    当前房间在扫描顺序中的下标（0-based）
+            rooms:       与扫描顺序一致的房间列表（默认 self.room_positions）。
+                         传入后已扫描房间标记与当前扫描顺序严格对应，
+                         避免 reverse_order=True（新楼层升序）时索引错位。
         """
         x_min, x_max, y_min, y_max = bounds
+        rooms_list = rooms if rooms is not None else self.room_positions
 
         # 清除旧标记，重新发布所有房间状态
         marker_array = MarkerArray()
@@ -1675,7 +1893,7 @@ class FrontierExplorer:
             m.id = i + 1
             m.type = Marker.CUBE
             m.action = Marker.ADD
-            s = self.room_positions[i]
+            s = rooms_list[i]
             cx = (s[0])  # center_x
             cy = s[1]    # center_y
             s_side = s[2]
@@ -2160,10 +2378,12 @@ class FrontierExplorer:
         # 门 [(door_y, side)]（x 隐含为走廊墙边 ±1.2，不存数据）
         self.door_positions = [
             (dy_ + dy, side) for (dy_, side) in self.door_positions]
-        # 房间 [(center_x, center_y, side, y_bottom, y_top)]
+        # 房间 [(center_x, center_y, side, y_bottom, y_top, door_y)]
         self.room_positions = [
-            (cx + dx, cy + dy, side, y_bottom + dy, y_top + dy)
-            for (cx, cy, side, y_bottom, y_top) in self.room_positions]
+            (cx + dx, cy + dy, side, y_bottom + dy, y_top + dy,
+             door_y + dy)
+            for (cx, cy, side, y_bottom, y_top, door_y)
+            in self.room_positions]
         # 楼梯 / 电梯
         if self.stair_center:
             sx, sy = self.stair_center
@@ -2787,13 +3007,19 @@ class FrontierExplorer:
     # ────────────── 房间位置估计 ──────────────
     def _estimate_room_positions(self, entrance_y, corridor_end_y):
         """
-        从已测量的 door_positions 和建筑边界估计每个房间的位置。
+        从两侧房门的实测位置独立估计每个房间（不再左右配对）。
 
-        推导逻辑：
-          1. 将 door_positions 按 y 配对（左+右在同一 y 为一对）
-          2. 走廊墙 x 位置 = 从门扫描数据中取非门区域的墙距中位数
-          3. 房间 y 范围 = 相邻门对之间的 y 区间
-          4. 房间 x 范围 = 建筑边界 ~ 走廊墙
+        推导逻辑（左右两侧完全独立）：
+          1. 对每侧门按 y 降序排列
+          2. 每个房间的 y 范围用"相邻门中点"锚定：
+              最上方房间: y_top = corridor_end_y,  y_bottom = (door0+door1)/2
+              中间房间:   y_top = (door_{i-1}+door_i)/2,
+                          y_bottom = (door_i+door_{i+1})/2
+              最下方房间: y_top = (door_{n-2}+door_{n-1})/2, y_bottom = entrance_y
+          3. 房间 x 范围 = 建筑边界 ~ 走廊墙
+
+        这样一侧漏检一扇门只会让该侧相邻房间范围变大（合并），
+        不会级联丢失另一侧房间，也不会因等分走廊而整体错位。
 
         输出每个房间的估计位置到日志。
         """
@@ -2805,91 +3031,77 @@ class FrontierExplorer:
             rospy.logwarn("[房间估计] 建筑边界未测量，跳过")
             return
 
-        # ── 1. 将 door_positions 按 y 配对 ──
-        # 左右门 y 值可能不完全相等（差 0.1m 左右），按容差分组
-        y_tolerance = 0.5  # 左右门 y 差 < 0.5m 即视为同一对
-        doors_sorted = sorted(self.door_positions, key=lambda d: d[0], reverse=True)
-
-        pairs = []  # [(pair_y, 'left', 'right'), ...]
-        used = set()
-        for i, (yi, side_i) in enumerate(doors_sorted):
-            if i in used:
-                continue
-            for j, (yj, side_j) in enumerate(doors_sorted):
-                if j <= i or j in used:
-                    continue
-                if side_i != side_j and abs(yi - yj) < y_tolerance:
-                    pair_y = (yi + yj) / 2.0
-                    pairs.append(pair_y)
-                    used.add(i)
-                    used.add(j)
-                    break
-
-        pairs.sort(reverse=True)
-
-        if not pairs:
-            rospy.logwarn("[房间估计] 未找到完整的左右门配对")
-            return
-
         corridor_half_width = 1.1  # 走廊宽度 2.2m 的一半
+        room_positions = []
 
         rospy.loginfo(
-            "[房间估计] ====== 房间位置估计 (共 %d 对, 建筑 x[%.1f, %.1f]) ======",
-            len(pairs), self.building_left, self.building_right)
+            "[房间估计] ====== 房间位置估计 (建筑 x[%.1f, %.1f]) ======",
+            self.building_left, self.building_right)
         rospy.loginfo("[房间估计] 走廊入口 y=%.2f, 走廊尽头 y=%.2f",
                       entrance_y, corridor_end_y)
 
-        # ── 2. 等分走廊：每对房间平分走廊长度 ──
-        # 走廊 y 范围 = [entrance_y, corridor_end_y]
-        # 每段长度 = 总长 / 对数，门位于段中心
-        segment_count = len(pairs)
-        segment_length = (corridor_end_y - entrance_y) / segment_count
+        # ── 按侧独立处理：左侧、右侧互不依赖 ──
+        for side in ('left', 'right'):
+            side_doors = sorted(
+                (y for (y, s) in self.door_positions if s == side),
+                reverse=True)
+            if not side_doors:
+                rospy.logwarn(
+                    "[房间估计] %s 侧无房门，跳过该侧房间估计", side)
+                continue
 
-        for i, pair_y in enumerate(pairs):
-            # i=0 是顶部对（靠近走廊尽头），i=1 是底部对（靠近入口）
-            y_top = corridor_end_y - i * segment_length
-            y_bottom = corridor_end_y - (i + 1) * segment_length
-
-            # x 范围
-            left_x_min = self.building_left
-            left_x_max = -corridor_half_width
-            right_x_min = corridor_half_width
-            right_x_max = self.building_right
-
-            # 房间中心点
-            left_center_x = (left_x_min + left_x_max) / 2.0
-            right_center_x = (right_x_min + right_x_max) / 2.0
-            room_center_y = (y_bottom + y_top) / 2.0
-
-            left_room_width = left_x_max - left_x_min
-            right_room_width = right_x_max - right_x_min
-            room_length = y_top - y_bottom
-
+            n = len(side_doors)
             rospy.loginfo(
-                "[房间估计] ─── 第 %d 对 (门 y=%.2f, 段 [%.1f, %.1f]) ───",
-                i + 1, pair_y, y_bottom, y_top)
-            rospy.loginfo(
-                "[房间估计]   左侧房间: x[%.1f, %.1f] y[%.1f, %.1f] "
-                "→ 中心 (%.1f, %.1f)  (%.1f×%.1f)",
-                left_x_min, left_x_max, y_bottom, y_top,
-                left_center_x, room_center_y,
-                left_room_width, room_length)
-            rospy.loginfo(
-                "[房间估计]   右侧房间: x[%.1f, %.1f] y[%.1f, %.1f] "
-                "→ 中心 (%.1f, %.1f)  (%.1f×%.1f)",
-                right_x_min, right_x_max, y_bottom, y_top,
-                right_center_x, room_center_y,
-                right_room_width, room_length)
+                "[房间估计] %s 侧: %d 扇门, y=%s",
+                side, n, ', '.join('%.2f' % y for y in side_doors))
 
-            # 保存到 self，供后续房间扫描导航使用
-            self.room_positions.append(
-                (left_center_x, room_center_y, 'left', y_bottom, y_top))
-            self.room_positions.append(
-                (right_center_x, room_center_y, 'right', y_bottom, y_top))
+            for i, door_y in enumerate(side_doors):
+                # ── 相邻门中点锚定 y 范围 ──
+                if i == 0:
+                    y_top = corridor_end_y
+                else:
+                    y_top = (side_doors[i - 1] + door_y) / 2.0
+                if i == n - 1:
+                    y_bottom = entrance_y
+                else:
+                    y_bottom = (door_y + side_doors[i + 1]) / 2.0
+
+                # ── x 范围 ──
+                if side == 'left':
+                    x_min = self.building_left
+                    x_max = -corridor_half_width
+                else:
+                    x_min = corridor_half_width
+                    x_max = self.building_right
+                center_x = (x_min + x_max) / 2.0
+                center_y = (y_bottom + y_top) / 2.0
+                room_width = x_max - x_min
+                room_length = y_top - y_bottom
+
+                rospy.loginfo(
+                    "[房间估计] ─── %s 侧第 %d/%d 间 (门 y=%.2f, "
+                    "段 [%.1f, %.1f]) ───",
+                    side, i + 1, n, door_y, y_bottom, y_top)
+                rospy.loginfo(
+                    "[房间估计]   x[%.1f, %.1f] y[%.1f, %.1f] "
+                    "→ 中心 (%.1f, %.1f)  (%.1f×%.1f)",
+                    x_min, x_max, y_bottom, y_top,
+                    center_x, center_y, room_width, room_length)
+
+                # 第 6 个字段 door_y = 实测门位置（导航精确对齐门口）
+                room_positions.append(
+                    (center_x, center_y, side, y_bottom, y_top, door_y))
+
+        if not room_positions:
+            rospy.logwarn("[房间估计] 两侧均无有效房间，跳过")
+            return
 
         # 按 y 降序排列（从走廊尽头向入口）
-        self.room_positions.sort(key=lambda r: r[1], reverse=True)
-        rospy.loginfo("[房间估计] ====== 估计完毕 ======")
+        room_positions.sort(key=lambda r: r[1], reverse=True)
+        self.room_positions = room_positions
+        rospy.loginfo(
+            "[房间估计] ====== 估计完毕 (共 %d 间) ======",
+            len(room_positions))
 
     # ────────────── 房间内前沿探索 （暂不使用，后续可改为危险物探测）──────────────
     def _explore_room(self, bounds, max_iterations=20):
@@ -2977,7 +3189,7 @@ class FrontierExplorer:
             return
 
         # ── 排序：首层 y 降序（远→近电梯），新楼层 y 升序（近电梯→远）──
-        # room_positions: [(center_x, center_y, side, y_bottom, y_top), ...]
+        # room_positions: [(center_x, center_y, side, y_bottom, y_top, door_y), ...]
         if reverse_order:
             rooms_sorted = sorted(
                 self.room_positions,
@@ -2994,8 +3206,8 @@ class FrontierExplorer:
             "[房间扫描] ====== 开始逐门扫描 (共 %d 间) ======",
             len(rooms_sorted))
 
-        for idx, (cx, cy, side, y_bottom, y_top) in enumerate(rooms_sorted):
-            door_y = (y_bottom + y_top) / 2.0
+        for idx, (cx, cy, side, y_bottom, y_top, door_y) in enumerate(rooms_sorted):
+            # door_y 为实际检测的门位置（_estimate_room_positions 存入）
 
             # 房间前沿探索边界
             if side == 'left':
@@ -3015,7 +3227,7 @@ class FrontierExplorer:
 
             # ── 发布房间标记 ──
             self._publish_current_room_marker(
-                idx, room_bounds, side, len(rooms_sorted))
+                idx, room_bounds, side, len(rooms_sorted), rooms_sorted)
 
             # ── 1. 导航到走廊门前 ──
             rospy.loginfo("[房间扫描] ① 导航到门口 (0.00, %.2f)", door_y)
