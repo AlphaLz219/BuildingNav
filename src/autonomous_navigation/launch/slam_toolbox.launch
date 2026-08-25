@@ -27,12 +27,12 @@
     <param name="link_match_minimum_response_fine" value="0.7"/>
     <param name="link_scan_max_distance"           value="0.3"/>
 
-    <param name="correlation_search_space_dimension"  value="0.02"/>
+    <param name="correlation_search_space_dimension"  value="0.50"/>
     <param name="correlation_search_space_resolution" value="0.01"/>
 
-    <param name="do_loop_closing"                    value="false"/>
+    <param name="do_loop_closing"                    value="true"/>
     <param name="loop_match_minimum_chain_size"      value="10"/>
-    <param name="loop_search_max_distance"           value="10.0"/>
+    <param name="loop_search_max_distance"           value="50.0"/> 
     <param name="loop_match_minimum_response_coarse" value="0.35"/>
     <param name="loop_match_minimum_response_fine"   value="0.45"/>
 
